@@ -1,0 +1,40 @@
+from datetime import datetime
+
+from pydantic import BaseModel
+
+
+class AlbumOut(BaseModel):
+    id: int
+    title: str
+    description: str | None
+    slug: str
+    cover_photo_id: int | None
+    sort_order: int
+    is_published: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AlbumCreate(BaseModel):
+    title: str
+    description: str | None = None
+    slug: str
+    is_published: bool = False
+
+
+class AlbumUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    slug: str | None = None
+    cover_photo_id: int | None = None
+    sort_order: int | None = None
+    is_published: bool | None = None
+
+
+class AlbumPhotosAdd(BaseModel):
+    photo_ids: list[int]
+
+
+class AlbumPhotosReorder(BaseModel):
+    ordered_photo_ids: list[int]

@@ -1,0 +1,28 @@
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, SmallInteger, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+class Album(Base):
+    __tablename__ = "albums"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    slug: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    cover_photo_id: Mapped[int | None] = mapped_column(ForeignKey("photos.id", use_alter=True, ondelete="SET NULL"))
+    sort_order: Mapped[int] = mapped_column(SmallInteger, default=0)
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    cover_photo: Mapped["Photo | None"] = relationship(  # type: ignore[name-defined]  # noqa: F821
+        "Photo", foreign_keys=[cover_photo_id], lazy="select"
+    )
+    photo_links: Mapped[list["AlbumPhoto"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
+        "AlbumPhoto", back_populates="album", order_by="AlbumPhoto.sort_order", lazy="select"
+    )
