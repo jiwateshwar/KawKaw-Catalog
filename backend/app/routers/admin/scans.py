@@ -204,54 +204,74 @@ async def geocode_search(
     ]
 
 
+_TAXON_CACHE_KEY = "ebird:taxonomy:full"
+
+
+async def _get_full_taxonomy() -> list[dict]:
+    """
+    Return the full eBird species taxonomy, downloading and caching it in Redis.
+    The taxonomy rarely changes (annual updates), so we cache for 30 days.
+    On first call this takes a few seconds; subsequent calls are instant Redis reads.
+    """
+    # Cache read
+    try:
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        data = await r.get(_TAXON_CACHE_KEY)
+        await r.aclose()
+        if data is not None:
+            return json.loads(data)
+    except Exception:
+        pass
+
+    # Download full taxonomy (~16 000 taxa, ~2 MB JSON)
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.get(
+            "https://api.ebird.org/v2/ref/taxonomy/ebird",
+            params={"fmt": "json", "locale": "en"},
+            headers={"X-eBirdApiToken": settings.EBIRD_API_KEY},
+        )
+    if resp.status_code != 200:
+        return []
+
+    # Keep only true species (drop hybrids, slashes, spuh, etc.) and minimal fields
+    taxonomy = [
+        {
+            "species_code": t["speciesCode"],
+            "common_name": t["comName"],
+            "scientific_name": t["sciName"],
+        }
+        for t in resp.json()
+        if t.get("category") == "species"
+    ]
+
+    # Cache for 30 days (non-fatal on failure)
+    try:
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        await r.setex(_TAXON_CACHE_KEY, _EBIRD_CACHE_TTL, json.dumps(taxonomy))
+        await r.aclose()
+    except Exception:
+        pass
+
+    return taxonomy
+
+
 @router.get("/ebird/find")
 async def ebird_find(
     q: str = Query(min_length=2),
     _: User = Depends(get_current_user),
 ):
     """
-    Search the global eBird taxonomy by name — spelling validation and
-    finding species not recently observed in the local area.
-    Results are cached in Redis for 30 days.
+    Search the global eBird species taxonomy by name (common or scientific).
+    Downloads and caches the full eBird taxonomy in Redis on first use (30-day TTL),
+    then searches locally — no per-query API calls after the first download.
     """
-    key = f"ebird:taxon:{q.lower()}"
-
-    # Cache read
-    try:
-        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-        cached = await r.get(key)
-        await r.aclose()
-        if cached is not None:
-            return json.loads(cached)
-    except Exception:
-        pass
-
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            "https://api.ebird.org/v2/ref/taxon/find",
-            params={"q": q, "locale": "en", "maxResults": 8, "cat": "species"},
-            headers={"X-eBirdApiToken": settings.EBIRD_API_KEY},
-        )
-    if resp.status_code != 200:
-        return []
-    result = [
-        {
-            "species_code": r["speciesCode"],
-            "common_name": r["name"],
-            "scientific_name": r.get("sciName", ""),
-        }
-        for r in resp.json()
+    taxonomy = await _get_full_taxonomy()
+    q_lower = q.lower()
+    matches = [
+        t for t in taxonomy
+        if q_lower in t["common_name"].lower() or q_lower in t["scientific_name"].lower()
     ]
-
-    # Cache write (non-fatal)
-    try:
-        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-        await r.setex(key, _EBIRD_CACHE_TTL, json.dumps(result))
-        await r.aclose()
-    except Exception:
-        pass
-
-    return result
+    return matches[:10]
 
 
 @router.get("/ebird")
