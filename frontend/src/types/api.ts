@@ -102,6 +102,8 @@ export interface DirectoryEntry {
   is_dir: boolean;
   child_count: number | null;
   file_count: number | null;
+  photo_count: number;
+  published_count: number;
 }
 
 export interface ThumbnailStatus {

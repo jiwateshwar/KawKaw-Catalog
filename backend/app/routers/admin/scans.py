@@ -11,6 +11,24 @@ from app.models.user import User
 from app.schemas.scan import DirectoryEntry, ScanJobOut, ScanRequest, ThumbnailStatus
 from app.services.scanner import list_directory
 
+async def _enrich_entries(entries: list[dict], db: AsyncSession) -> list[dict]:
+    """Add photo_count and published_count from DB for each directory entry."""
+    for entry in entries:
+        if not entry["is_dir"]:
+            continue
+        prefix = entry["path"].rstrip("/") + "/"
+        row = (
+            await db.execute(
+                select(
+                    func.count(Photo.id).label("total"),
+                    func.count(Photo.id).filter(Photo.is_published == True).label("published"),
+                ).where(Photo.relative_path.like(prefix + "%"))
+            )
+        ).one()
+        entry["photo_count"] = row.total or 0
+        entry["published_count"] = row.published or 0
+    return entries
+
 router = APIRouter(prefix="/api/admin", tags=["admin-scans"])
 
 
@@ -90,9 +108,11 @@ async def list_scans(
 @router.get("/scans/browse", response_model=list[DirectoryEntry])
 async def browse_directory(
     path: str = Query(""),
+    db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     entries = await list_directory(path)
+    entries = await _enrich_entries(entries, db)
     return entries
 
 

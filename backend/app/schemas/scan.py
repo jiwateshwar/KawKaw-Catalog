@@ -35,6 +35,8 @@ class DirectoryEntry(BaseModel):
     is_dir: bool
     child_count: int | None = None   # number of subdirs (for dirs)
     file_count: int | None = None    # media files directly in this dir
+    photo_count: int = 0             # photos in DB within this folder (recursive)
+    published_count: int = 0         # published photos in DB within this folder
 
 
 class ThumbnailStatus(BaseModel):

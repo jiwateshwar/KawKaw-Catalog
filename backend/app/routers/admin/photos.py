@@ -23,6 +23,7 @@ async def list_photos_admin(
     is_published: bool | None = None,
     location_id: int | None = None,
     trip_id: int | None = None,
+    folder_path: str | None = None,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -42,6 +43,9 @@ async def list_photos_admin(
         q = q.where(Photo.location_id == location_id)
     if trip_id:
         q = q.where(Photo.trip_id == trip_id)
+    if folder_path:
+        prefix = folder_path.rstrip("/") + "/"
+        q = q.where(Photo.relative_path.like(prefix + "%"))
 
     rows = (await db.execute(q)).scalars().all()
     has_more = len(rows) > limit
