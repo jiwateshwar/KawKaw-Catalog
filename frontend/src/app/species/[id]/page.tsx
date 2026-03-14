@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { notFound } from "next/navigation";
 import { PublicNav } from "@/components/public/PublicNav";
 import { PhotoGrid } from "@/components/public/PhotoGrid";

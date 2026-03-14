@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { PublicNav } from "@/components/public/PublicNav";
 import Link from "next/link";
 import type { Location } from "@/types/api";

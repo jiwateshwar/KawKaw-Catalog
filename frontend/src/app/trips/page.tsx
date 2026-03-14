@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { PublicNav } from "@/components/public/PublicNav";
 import { TripCard } from "@/components/public/TripCard";
 import type { Trip } from "@/types/api";

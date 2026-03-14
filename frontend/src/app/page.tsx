@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { PublicNav } from "@/components/public/PublicNav";
 import { PhotoGrid } from "@/components/public/PhotoGrid";
 import { TripCard } from "@/components/public/TripCard";
