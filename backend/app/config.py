@@ -1,11 +1,24 @@
+from urllib.parse import quote
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://kawkaw:changeme@postgres:5432/kawkaw"
+    # PostgreSQL — individual vars so passwords with special chars work
+    POSTGRES_USER: str = "kawkaw"
+    POSTGRES_PASSWORD: str = "changeme"
+    POSTGRES_DB: str = "kawkaw"
+    POSTGRES_HOST: str = "postgres"
+    POSTGRES_PORT: int = 5432
+
+    @property
+    def DATABASE_URL(self) -> str:
+        password = quote(self.POSTGRES_PASSWORD, safe="")
+        return (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{password}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
 
     # Redis
     REDIS_URL: str = "redis://redis:6379/0"
@@ -20,11 +33,6 @@ class Settings(BaseSettings):
     MEDIA_ROOT: str = "/mnt/media"
     THUMBS_ROOT: str = "/mnt/thumbs"
     THUMBS_URL_PREFIX: str = "/media/thumbs"
-
-    # PostgreSQL (used by alembic env.py)
-    POSTGRES_USER: str = "kawkaw"
-    POSTGRES_PASSWORD: str = "changeme"
-    POSTGRES_DB: str = "kawkaw"
 
 
 settings = Settings()
