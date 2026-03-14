@@ -18,7 +18,7 @@ sudo nano /etc/samba/kawkaw.creds
 ```
 
 ```
-username=kawkaw_reader
+username=your_truenas_user
 password=your_smb_password
 ```
 
@@ -26,10 +26,10 @@ password=your_smb_password
 sudo chmod 600 /etc/samba/kawkaw.creds
 ```
 
-Add to `/etc/fstab`:
+Add to `/etc/fstab` (replace IP and share name with your TrueNAS details):
 
 ```
-//192.168.1.x/photos  /mnt/truenas_photos  cifs  credentials=/etc/samba/kawkaw.creds,uid=1000,gid=1000,file_mode=0444,dir_mode=0555,vers=3.0,_netdev  0  0
+//192.168.0.x/photos  /mnt/truenas_photos  cifs  credentials=/etc/samba/kawkaw.creds,uid=1000,gid=1000,file_mode=0444,dir_mode=0555,vers=3.0,_netdev  0  0
 ```
 
 Mount it:
@@ -42,56 +42,48 @@ ls /mnt/truenas_photos   # verify your photos are visible
 
 ---
 
-## 2. Configure Environment
+## 2. Deploy with Portainer
 
-Copy the example env file:
-
-```bash
-cp .env.example .env
-nano .env
-```
-
-Update these values at minimum:
-
-| Variable | Description |
-|---|---|
-| `POSTGRES_PASSWORD` | Strong password for the database |
-| `JWT_SECRET_KEY` | Run `openssl rand -hex 32` and paste the result |
-| `NEXT_PUBLIC_API_URL` | Set to `http://YOUR_HOST_IP/api` for access from your browser |
-
-> **Admin credentials are NOT set here.** On first browser access you will be shown a setup wizard where you create your admin account and configure the gallery title.
-
-The SMB credentials in `.env` (`SMB_HOST`, `SMB_USER`, `SMB_PASS`) are only used for reference — the actual mount is done via `/etc/fstab` on the host.
-
----
-
-## 3. Deploy with Portainer
-
-### Option A: Portainer Stack (recommended)
+> **No `.env` file needed.** All variables are set in Portainer's built-in
+> environment editor — the compose file will never look for a file on disk.
 
 1. In Portainer, go to **Stacks → Add Stack**
 2. Name it `kawkaw-catalog`
-3. Either paste the contents of `docker-compose.yml`, or use **Repository** mode pointing to your git repo
-4. Add the environment variables from your `.env` file in the "Environment variables" section
+3. Paste the contents of `docker-compose.yml` into the editor
+   (or use **Repository** mode if the project is in a git repo)
+4. Scroll down to **Environment variables** and add the following:
+
+### Required variables
+
+| Variable | Value |
+|---|---|
+| `POSTGRES_PASSWORD` | A strong password — e.g. `openssl rand -base64 24` |
+| `JWT_SECRET_KEY` | Random hex string — run `openssl rand -hex 32` |
+| `NEXT_PUBLIC_API_URL` | `http://YOUR_HOST_IP/api` |
+
+### Optional variables (defaults shown)
+
+| Variable | Default | Override if… |
+|---|---|---|
+| `POSTGRES_USER` | `kawkaw` | You want a different DB username |
+| `POSTGRES_DB` | `kawkaw` | You want a different DB name |
+| `MEDIA_HOST_PATH` | `/mnt/truenas_photos` | You mounted the SMB share at a different path |
+
 5. Click **Deploy the stack**
 
-### Option B: Docker Compose CLI
+### Docker Compose CLI alternative
+
+If running locally without Portainer, create a `.env` file from the example:
 
 ```bash
-cd "KawKaw Catalog"
+cp .env.example .env
+# Edit .env and fill in POSTGRES_PASSWORD, JWT_SECRET_KEY, NEXT_PUBLIC_API_URL
 docker compose up -d
-```
-
-Check logs:
-
-```bash
-docker compose logs -f api
-docker compose logs -f celery_worker
 ```
 
 ---
 
-## 4. First-Time Setup Wizard
+## 3. First-Time Setup Wizard
 
 Wait ~30 seconds for the database to initialize, then open `http://YOUR_HOST_IP/` in your browser.
 
@@ -118,24 +110,24 @@ Thumbnails will be generated in the background — you can see progress on the *
 
 ---
 
-## 5. Updating the App
+## 4. Updating the App
+
+In Portainer: **Stacks → kawkaw-catalog → Editor → Update the stack** (rebuild images).
+
+Or via CLI:
 
 ```bash
-docker compose pull
 docker compose up -d --build
 ```
 
-Or in Portainer: **Stacks → kawkaw-catalog → Editor → Update the stack**.
-
 ---
 
-## 6. Backup
+## 5. Backup
 
 Critical data to back up:
 
 - **PostgreSQL database**: `docker compose exec postgres pg_dump -U kawkaw kawkaw > backup.sql`
 - **Thumbnails volume**: `docker run --rm -v kawkaw-catalog_thumbs:/data -v $(pwd):/backup alpine tar czf /backup/thumbs.tar.gz /data`
-- Your `.env` file (keep it secure)
 
 The original photos on TrueNAS are never modified — they are always mounted read-only.
 
@@ -143,10 +135,15 @@ The original photos on TrueNAS are never modified — they are always mounted re
 
 ## Troubleshooting
 
-**SMB mount fails:** Check `dmesg | tail -20` and verify the TrueNAS share name and credentials.
+**Stack fails to deploy in Portainer with "env file not found":**
+Remove any `env_file:` lines from the compose file — Portainer sets variables through its own editor, not a file on disk.
 
-**Thumbnails stuck at "pending":** Check the Celery worker: `docker compose logs celery_worker`. Ensure `libraw-dev` and `ffmpeg` installed correctly in the container.
+**SMB mount fails:** Check `dmesg | tail -20` and verify the TrueNAS IP, share name, and credentials.
 
-**RAW files show "No preview":** The file might be from a camera not supported by LibRaw. Check the worker log for the specific error.
+**Thumbnails stuck at "pending":** Check `docker compose logs celery_worker`. Ensure `libraw-dev` and `ffmpeg` are installed correctly in the container.
 
-**API returns 500:** Check `docker compose logs api`. The most common cause on first run is the database not being ready — wait 30s and reload.
+**RAW files show "No preview":** The camera model may not be supported by LibRaw. Check the worker log for the specific error.
+
+**API returns 500 on first run:** The database may still be initializing. Wait 30 seconds and reload.
+
+**Setup wizard re-appears after setup:** The `kk_setup_complete` cookie may have been cleared. Completing the wizard again is safe — it will return a 409 if already set up and redirect you to sign in.
