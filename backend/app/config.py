@@ -34,5 +34,8 @@ class Settings(BaseSettings):
     THUMBS_ROOT: str = "/mnt/thumbs"
     THUMBS_URL_PREFIX: str = "/media/thumbs"
 
+    # External APIs
+    EBIRD_API_KEY: str = "v3q70973sodk"
+
 
 settings = Settings()

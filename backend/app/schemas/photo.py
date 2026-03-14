@@ -62,3 +62,13 @@ class PhotoPage(BaseModel):
     items: list[PhotoOut]
     next_cursor: int | None
     total: int | None = None
+
+
+class BulkFolderUpdate(BaseModel):
+    folder_path: str
+    location_id: int | None = None        # use existing location
+    location_name: str | None = None      # create new location with this name
+    location_lat: float | None = None
+    location_lng: float | None = None
+    location_country: str | None = None
+    shoot_date: str | None = None         # YYYY-MM-DD; overwrites captured_at for all photos

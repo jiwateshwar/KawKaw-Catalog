@@ -106,6 +106,20 @@ export interface DirectoryEntry {
   published_count: number;
 }
 
+export interface GeocodeSuggestion {
+  display_name: string;
+  name: string;
+  lat: number;
+  lng: number;
+  country: string | null;
+}
+
+export interface EbirdSpecies {
+  species_code: string;
+  common_name: string;
+  scientific_name: string;
+}
+
 export interface ThumbnailStatus {
   pending: number;
   processing: number;

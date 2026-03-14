@@ -1,7 +1,9 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.deps import get_current_user, get_db
 from app.models.location import Location
 from app.models.photo import Photo
@@ -147,3 +149,61 @@ async def retry_errors(db: AsyncSession = Depends(get_db), _: User = Depends(get
         generate_thumbnails.delay(photo_id)
 
     return {"queued": len(rows)}
+
+
+@router.get("/geocode")
+async def geocode_search(
+    q: str = Query(min_length=2),
+    _: User = Depends(get_current_user),
+):
+    """Proxy to Nominatim (OpenStreetMap) for location autocomplete with lat/lng."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": q, "format": "json", "limit": 6, "addressdetails": 1},
+            headers={"User-Agent": "KawKawCatalog/1.0"},
+        )
+    if resp.status_code != 200:
+        return []
+    results = resp.json()
+    return [
+        {
+            "display_name": r["display_name"],
+            "name": (r.get("name") or r["display_name"].split(",")[0]).strip(),
+            "lat": float(r["lat"]),
+            "lng": float(r["lon"]),
+            "country": r.get("address", {}).get("country"),
+        }
+        for r in results
+    ]
+
+
+@router.get("/ebird")
+async def ebird_nearby(
+    lat: float,
+    lng: float,
+    dist: int = Query(50, le=200),
+    _: User = Depends(get_current_user),
+):
+    """
+    Proxy to eBird API v2 — returns deduplicated species observed within `dist` km
+    of the given coordinates in the last 30 days.
+    """
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            "https://api.ebird.org/v2/data/obs/geo/recent",
+            params={"lat": lat, "lng": lng, "dist": dist, "back": 30, "maxResults": 1000},
+            headers={"X-eBirdApiToken": settings.EBIRD_API_KEY},
+        )
+    if resp.status_code != 200:
+        return []
+    seen: dict[str, dict] = {}
+    for obs in resp.json():
+        code = obs.get("speciesCode")
+        if code and code not in seen:
+            seen[code] = {
+                "species_code": code,
+                "common_name": obs.get("comName", ""),
+                "scientific_name": obs.get("sciName", ""),
+            }
+    return sorted(seen.values(), key=lambda x: x["common_name"])

@@ -104,6 +104,11 @@ export const adminPhotos = {
       method: "POST",
       body: JSON.stringify({ photo_ids, is_published }),
     }),
+  bulkFolderUpdate: (data: object) =>
+    request("/admin/photos/bulk-folder-update", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 export const adminSpecies = {
@@ -167,6 +172,13 @@ export const adminScans = {
     request(`/admin/scans/browse?path=${encodeURIComponent(path)}`),
   thumbnailStatus: () => request("/admin/thumbnails/status"),
   retryErrors: () => request("/admin/thumbnails/retry-errors", { method: "POST" }),
+};
+
+export const adminMeta = {
+  geocode: (q: string) =>
+    request(`/admin/geocode?q=${encodeURIComponent(q)}`),
+  ebird: (lat: number, lng: number, dist = 50) =>
+    request(`/admin/ebird?lat=${lat}&lng=${lng}&dist=${dist}`),
 };
 
 // Helper: remove undefined values from params object

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date as date_cls, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, update
@@ -6,11 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.deps import get_current_user, get_db
+from app.models.location import Location
 from app.models.photo import Photo, PhotoSpecies
 from app.models.species import Species
 from app.models.user import User
 from app.routers.public.photos import _photo_to_out
-from app.schemas.photo import BulkPublishRequest, PhotoOut, PhotoPage, PhotoSpeciesUpdate, PhotoUpdate
+from app.schemas.photo import BulkFolderUpdate, BulkPublishRequest, PhotoOut, PhotoPage, PhotoSpeciesUpdate, PhotoUpdate
 
 router = APIRouter(prefix="/api/admin/photos", tags=["admin-photos"])
 
@@ -161,3 +162,49 @@ async def bulk_publish(
     )
     await db.commit()
     return {"updated": len(body.photo_ids)}
+
+
+@router.post("/bulk-folder-update")
+async def bulk_folder_update(
+    body: BulkFolderUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    Apply location and/or shoot date to every photo in a folder (recursive).
+    If location_name is supplied without location_id, a new Location is created.
+    shoot_date overwrites captured_at for all matching photos.
+    """
+    prefix = body.folder_path.rstrip("/") + "/"
+
+    # Resolve or create location
+    location_id = body.location_id
+    if not location_id and body.location_name and body.location_name.strip():
+        loc = Location(
+            name=body.location_name.strip(),
+            latitude=body.location_lat,
+            longitude=body.location_lng,
+            country=body.location_country,
+        )
+        db.add(loc)
+        await db.flush()
+        location_id = loc.id
+
+    values: dict = {}
+    if location_id is not None:
+        values["location_id"] = location_id
+    if body.shoot_date:
+        try:
+            d = date_cls.fromisoformat(body.shoot_date)
+            values["captured_at"] = datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+        except ValueError:
+            pass
+
+    if values:
+        await db.execute(
+            update(Photo)
+            .where(Photo.relative_path.like(prefix + "%"))
+            .values(**values)
+        )
+    await db.commit()
+    return {"ok": True, "location_id": location_id}
