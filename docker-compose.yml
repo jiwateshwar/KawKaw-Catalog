@@ -38,6 +38,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     env_file: .env
+    environment:
+      # Internal container-to-container URL used by Next.js middleware
+      # to call /api/setup/status without going through Nginx
+      INTERNAL_API_URL: http://api:8000
     depends_on:
       - api
     restart: unless-stopped

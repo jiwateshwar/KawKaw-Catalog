@@ -9,28 +9,20 @@ from app.models import Base  # noqa: F401 — ensure models are registered
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Seed admin user on first run
-    await _seed_admin()
+    # Ensure the AppSettings row exists so /api/setup/status always works
+    await _ensure_settings_row()
     yield
 
 
-async def _seed_admin():
+async def _ensure_settings_row():
     from sqlalchemy import select
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from app.config import settings
     from app.database import AsyncSessionLocal
-    from app.models.user import User
-    from app.services.auth import hash_password
+    from app.models.settings import AppSettings
 
     async with AsyncSessionLocal() as db:
-        existing = await db.scalar(select(User).limit(1))
-        if not existing:
-            admin = User(
-                username=settings.ADMIN_USERNAME,
-                hashed_pw=hash_password(settings.ADMIN_PASSWORD),
-            )
-            db.add(admin)
+        row = await db.scalar(select(AppSettings).limit(1))
+        if row is None:
+            db.add(AppSettings())
             await db.commit()
 
 
@@ -43,6 +35,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Setup wizard (must be first — no auth required)
+from app.routers.setup import router as setup_router
+app.include_router(setup_router)
 
 # Auth
 from app.routers.auth import router as auth_router

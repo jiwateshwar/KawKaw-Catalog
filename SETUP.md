@@ -57,9 +57,9 @@ Update these values at minimum:
 |---|---|
 | `POSTGRES_PASSWORD` | Strong password for the database |
 | `JWT_SECRET_KEY` | Run `openssl rand -hex 32` and paste the result |
-| `ADMIN_USERNAME` | Your admin login username |
-| `ADMIN_PASSWORD` | Your admin login password (change immediately after first login) |
 | `NEXT_PUBLIC_API_URL` | Set to `http://YOUR_HOST_IP/api` for access from your browser |
+
+> **Admin credentials are NOT set here.** On first browser access you will be shown a setup wizard where you create your admin account and configure the gallery title.
 
 The SMB credentials in `.env` (`SMB_HOST`, `SMB_USER`, `SMB_PASS`) are only used for reference — the actual mount is done via `/etc/fstab` on the host.
 
@@ -91,14 +91,17 @@ docker compose logs -f celery_worker
 
 ---
 
-## 4. First-Time Setup
+## 4. First-Time Setup Wizard
 
-Wait ~30 seconds for the database to initialize, then open:
+Wait ~30 seconds for the database to initialize, then open `http://YOUR_HOST_IP/` in your browser.
 
-- **Admin panel**: `http://YOUR_HOST_IP/admin`
-- **Public gallery**: `http://YOUR_HOST_IP/`
+You will be automatically redirected to the **Setup Wizard** (`/setup`), which:
 
-Log in with your `ADMIN_USERNAME` / `ADMIN_PASSWORD` from `.env`.
+1. **Status check** — confirms the API is running and shows how many media files are visible in your TrueNAS mount
+2. **Create admin account** — choose your username, password, and gallery title
+3. **Done** — redirects you to the admin panel
+
+After setup is complete, any future visit skips the wizard entirely.
 
 ### Import Your First Folder
 

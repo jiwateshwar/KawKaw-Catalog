@@ -21,10 +21,6 @@ class Settings(BaseSettings):
     THUMBS_ROOT: str = "/mnt/thumbs"
     THUMBS_URL_PREFIX: str = "/media/thumbs"
 
-    # Seed admin
-    ADMIN_USERNAME: str = "admin"
-    ADMIN_PASSWORD: str = "changeme"
-
     # PostgreSQL (used by alembic env.py)
     POSTGRES_USER: str = "kawkaw"
     POSTGRES_PASSWORD: str = "changeme"
