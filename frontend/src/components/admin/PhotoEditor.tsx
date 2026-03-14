@@ -71,7 +71,6 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
   });
 
   // Global eBird taxonomy search — fires on debounced input, used for spelling validation
-  const debouncedQ = debouncedSearch.toLowerCase();
   const { data: taxonomyResults, isFetching: taxonomyFetching } = useQuery<EbirdSpecies[]>({
     queryKey: ["ebird-taxonomy", debouncedSearch],
     queryFn: () => adminMeta.ebirdFind(debouncedSearch) as Promise<EbirdSpecies[]>,
@@ -137,7 +136,9 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
 
   // eBird species not yet in DB that match the search
   const dbSciNames = new Set(
-    (allSpecies ?? []).map((s) => (s.scientific_name ?? "").toLowerCase())
+    (allSpecies ?? [])
+      .filter((s) => s.scientific_name)
+      .map((s) => s.scientific_name!.toLowerCase())
   );
   const ebirdOnlyMatches = q.length >= 2
     ? (ebirdSpecies ?? [])
@@ -152,14 +153,14 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
 
   const displayDbSpecies = sortedDbSpecies.slice(0, 8);
 
-  // Taxonomy results not already shown in DB or nearby-eBird sections
-  const ebirdNearbySciNames = new Set(
-    (ebirdSpecies ?? []).map((e) => e.scientific_name.toLowerCase())
-  );
+  // Taxonomy: exclude only what's already visible in DB or section 2 (nearby matches)
+  // Don't exclude based on the full nearby list — it can be 200+ species and would hide
+  // nearly everything from global taxonomy.
+  const shownInNearby = new Set(ebirdOnlyMatches.map((e) => e.species_code));
   const taxonomyOnlyMatches = (taxonomyResults ?? []).filter(
     (e) =>
       !dbSciNames.has(e.scientific_name.toLowerCase()) &&
-      !ebirdNearbySciNames.has(e.scientific_name.toLowerCase())
+      !shownInNearby.has(e.species_code)
   );
 
 
