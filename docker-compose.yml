@@ -10,7 +10,7 @@ version: "3.9"
 # Required variables (no safe default — must be set):
 #   POSTGRES_PASSWORD   strong password for the database
 #   JWT_SECRET_KEY      run: openssl rand -hex 32
-#   NEXT_PUBLIC_API_URL http://<your-host-ip>/api
+#   NEXT_PUBLIC_API_URL http://<your-host-ip>:8080/api
 #
 # Optional variables (defaults shown):
 #   POSTGRES_USER       kawkaw
@@ -35,7 +35,7 @@ services:
       context: ./nginx
       dockerfile: Dockerfile
     ports:
-      - "80:80"
+      - "8080:80"
     volumes:
       - thumbs:/mnt/thumbs:ro
     depends_on:
