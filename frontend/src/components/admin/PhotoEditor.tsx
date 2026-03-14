@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminPhotos, adminSpecies, adminLocations, adminTrips, adminMeta } from "@/lib/api";
 import type { Photo, Species, Location, Trip, EbirdSpecies } from "@/types/api";
 
@@ -13,6 +13,8 @@ interface Props {
 }
 
 export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) {
+  const qc = useQueryClient();
+
   const [title, setTitle] = useState(photo.title ?? "");
   const [caption, setCaption] = useState(photo.caption ?? "");
   const [isPublished, setIsPublished] = useState(photo.is_published);
@@ -78,27 +80,58 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
     onSuccess: (updated) => onSaved(updated),
   });
 
-  // Filter and sort species suggestions
-  const filteredSpecies =
+  // Create a new species from eBird data, then tag it
+  const createAndTag = useMutation({
+    mutationFn: (ebird: EbirdSpecies) =>
+      adminSpecies.create({
+        common_name: ebird.common_name,
+        scientific_name: ebird.scientific_name || null,
+      }) as Promise<Species>,
+    onSuccess: (created) => {
+      setSpeciesIds((prev) => [...prev, created.id]);
+      setSpeciesSearch("");
+      qc.invalidateQueries({ queryKey: ["admin-species"] });
+    },
+  });
+
+  const q = speciesSearch.toLowerCase();
+
+  // DB species that match the search and aren't already tagged
+  const filteredDbSpecies =
     allSpecies?.filter(
       (s) =>
         !speciesIds.includes(s.id) &&
-        (s.common_name.toLowerCase().includes(speciesSearch.toLowerCase()) ||
-          (s.scientific_name ?? "").toLowerCase().includes(speciesSearch.toLowerCase()))
+        (s.common_name.toLowerCase().includes(q) ||
+          (s.scientific_name ?? "").toLowerCase().includes(q))
     ) ?? [];
 
-  // eBird-known species rise to the top
-  const sortedSpecies = locationCoords
-    ? [...filteredSpecies].sort((a, b) => {
+  // eBird-known DB species float to top
+  const sortedDbSpecies = locationCoords
+    ? [...filteredDbSpecies].sort((a, b) => {
         const aE = ebirdSciNames.has((a.scientific_name ?? "").toLowerCase());
         const bE = ebirdSciNames.has((b.scientific_name ?? "").toLowerCase());
         if (aE && !bE) return -1;
         if (!aE && bE) return 1;
         return 0;
       })
-    : filteredSpecies;
+    : filteredDbSpecies;
 
-  const displaySpecies = sortedSpecies.slice(0, 10);
+  // eBird species not yet in DB that match the search
+  const dbSciNames = new Set(
+    (allSpecies ?? []).map((s) => (s.scientific_name ?? "").toLowerCase())
+  );
+  const ebirdOnlyMatches = q.length >= 2
+    ? (ebirdSpecies ?? [])
+        .filter(
+          (e) =>
+            !dbSciNames.has(e.scientific_name.toLowerCase()) &&
+            (e.common_name.toLowerCase().includes(q) ||
+              e.scientific_name.toLowerCase().includes(q))
+        )
+        .slice(0, 5)
+    : [];
+
+  const displayDbSpecies = sortedDbSpecies.slice(0, 8);
 
   // All currently tagged species (original + newly added in this session)
   const taggedSpecies = [
@@ -248,7 +281,7 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
             onChange={(e) => setSpeciesSearch(e.target.value)}
             placeholder={
               locationCoords && ebirdSpecies?.length
-                ? `Search — 📍 nearby species shown first…`
+                ? "Search — eBird nearby species shown first…"
                 : "Search species…"
             }
             className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
@@ -256,42 +289,69 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
 
           {/* Dropdown */}
           {speciesSearch && (
-            <div className="bg-gray-800 border border-gray-700 rounded mt-1 max-h-40 overflow-auto">
-              {displaySpecies.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-gray-500">No matches</p>
-              ) : (
-                displaySpecies.map((s) => {
-                  const isNearby =
-                    locationCoords &&
-                    ebirdSciNames.has((s.scientific_name ?? "").toLowerCase());
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => {
-                        setSpeciesIds((prev) => [...prev, s.id]);
-                        setSpeciesSearch("");
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700 flex items-center gap-1.5"
-                    >
-                      {isNearby && (
-                        <span
-                          className="text-brand-400 text-xs shrink-0"
-                          title="Observed near this location (eBird)"
-                        >
-                          📍
-                        </span>
+            <div className="bg-gray-800 border border-gray-700 rounded mt-1 max-h-48 overflow-auto">
+              {/* DB species */}
+              {displayDbSpecies.map((s) => {
+                const isNearby =
+                  locationCoords &&
+                  ebirdSciNames.has((s.scientific_name ?? "").toLowerCase());
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => {
+                      setSpeciesIds((prev) => [...prev, s.id]);
+                      setSpeciesSearch("");
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700 flex items-center gap-1.5"
+                  >
+                    {isNearby ? (
+                      <span className="text-brand-400 text-xs shrink-0" title="Observed nearby (eBird)">📍</span>
+                    ) : (
+                      <span className="w-4 shrink-0" />
+                    )}
+                    <span className="flex-1 truncate">
+                      {s.common_name}
+                      {s.scientific_name && (
+                        <span className="text-gray-500 italic ml-1 text-xs">{s.scientific_name}</span>
                       )}
-                      <span className="flex-1">
-                        {s.common_name}
-                        {s.scientific_name && (
-                          <span className="text-gray-500 italic ml-1 text-xs">
-                            {s.scientific_name}
-                          </span>
+                    </span>
+                  </button>
+                );
+              })}
+
+              {/* eBird-only species (not yet in DB) */}
+              {ebirdOnlyMatches.length > 0 && (
+                <>
+                  {displayDbSpecies.length > 0 && (
+                    <div className="border-t border-gray-700 mx-2 my-1" />
+                  )}
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider px-3 py-0.5">
+                    From eBird — click to add &amp; tag
+                  </p>
+                  {ebirdOnlyMatches.map((e) => (
+                    <button
+                      key={e.species_code}
+                      onClick={() => createAndTag.mutate(e)}
+                      disabled={createAndTag.isPending}
+                      className="w-full text-left px-3 py-1.5 text-sm text-gray-400 hover:bg-gray-700 flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <span className="text-brand-500 text-xs shrink-0">📍+</span>
+                      <span className="flex-1 truncate">
+                        {e.common_name}
+                        {e.scientific_name && (
+                          <span className="text-gray-500 italic ml-1 text-xs">{e.scientific_name}</span>
                         )}
                       </span>
                     </button>
-                  );
-                })
+                  ))}
+                </>
+              )}
+
+              {displayDbSpecies.length === 0 && ebirdOnlyMatches.length === 0 && (
+                <p className="px-3 py-2 text-xs text-gray-500">
+                  No matches
+                  {!locationCoords && " — set a folder location to see eBird suggestions"}
+                </p>
               )}
             </div>
           )}

@@ -1,9 +1,35 @@
+import json
+
 import httpx
+import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+
+_EBIRD_CACHE_TTL = 30 * 24 * 3600  # 30 days in seconds
+
+
+async def _ebird_cached(lat: float, lng: float, dist: int) -> list[dict] | None:
+    """Return cached eBird result from Redis, or None if cache miss."""
+    try:
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        data = await r.get(f"ebird:{lat}:{lng}:{dist}")
+        await r.aclose()
+        return json.loads(data) if data else None
+    except Exception:
+        return None
+
+
+async def _ebird_store(lat: float, lng: float, dist: int, result: list[dict]) -> None:
+    """Persist eBird result to Redis with a 30-day TTL."""
+    try:
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        await r.setex(f"ebird:{lat}:{lng}:{dist}", _EBIRD_CACHE_TTL, json.dumps(result))
+        await r.aclose()
+    except Exception:
+        pass  # cache write failure is non-fatal
 from app.deps import get_current_user, get_db
 from app.models.location import Location
 from app.models.photo import Photo
@@ -187,12 +213,20 @@ async def ebird_nearby(
 ):
     """
     Proxy to eBird API v2 — returns deduplicated species observed within `dist` km
-    of the given coordinates in the last 30 days.
+    of the given coordinates in the last 30 days. Results are cached in Redis for 30 days.
     """
+    # Round to 2 decimal places (~1.1 km grid) for cache key stability
+    clat = round(lat, 2)
+    clng = round(lng, 2)
+
+    cached = await _ebird_cached(clat, clng, dist)
+    if cached is not None:
+        return cached
+
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             "https://api.ebird.org/v2/data/obs/geo/recent",
-            params={"lat": lat, "lng": lng, "dist": dist, "back": 30, "maxResults": 1000},
+            params={"lat": clat, "lng": clng, "dist": dist, "back": 30, "maxResults": 1000},
             headers={"X-eBirdApiToken": settings.EBIRD_API_KEY},
         )
     if resp.status_code != 200:
@@ -206,4 +240,6 @@ async def ebird_nearby(
                 "common_name": obs.get("comName", ""),
                 "scientific_name": obs.get("sciName", ""),
             }
-    return sorted(seen.values(), key=lambda x: x["common_name"])
+    result = sorted(seen.values(), key=lambda x: x["common_name"])
+    await _ebird_store(clat, clng, dist, result)
+    return result
