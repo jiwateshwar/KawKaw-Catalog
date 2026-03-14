@@ -73,6 +73,9 @@ def generate_thumbnails(self, photo_id: int) -> None:
             try:
                 img = file_to_pil(abs_path, photo.file_type)
 
+                # Store source dimensions (after EXIF rotation) for layout detection
+                photo.width, photo.height = img.size
+
                 # Use SHA256 for thumbnail path; fall back to photo id
                 sha = photo.sha256 or f"id{photo_id:016x}"
                 paths = _thumb_paths(sha)

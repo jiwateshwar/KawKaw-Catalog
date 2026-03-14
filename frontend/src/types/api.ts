@@ -12,6 +12,8 @@ export interface Photo {
   thumb_md_url: string | null;
   thumb_lg_url: string | null;
   thumb_status: "pending" | "processing" | "done" | "error";
+  width: number | null;
+  height: number | null;
   captured_at: string | null;
   camera_make: string | null;
   camera_model: string | null;

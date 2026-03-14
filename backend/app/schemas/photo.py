@@ -19,6 +19,8 @@ class PhotoOut(BaseModel):
     thumb_md_url: str | None
     thumb_lg_url: str | None
     thumb_status: str
+    width: int | None
+    height: int | None
     captured_at: datetime | None
     camera_make: str | None
     camera_model: str | None
