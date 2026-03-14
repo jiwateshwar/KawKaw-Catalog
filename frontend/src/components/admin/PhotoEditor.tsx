@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminPhotos, adminSpecies, adminLocations, adminTrips, adminMeta } from "@/lib/api";
 import type { Photo, Species, Location, Trip, EbirdSpecies } from "@/types/api";
@@ -23,6 +23,8 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
   const [tripId, setTripId] = useState<number | "">(photo.trip_id ?? "");
   const [speciesIds, setSpeciesIds] = useState<number[]>(photo.species.map((s) => s.id));
   const [speciesSearch, setSpeciesSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Re-sync when the photo changes (user clicks a different photo)
   useEffect(() => {
@@ -34,7 +36,15 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
     setTripId(photo.trip_id ?? "");
     setSpeciesIds(photo.species.map((s) => s.id));
     setSpeciesSearch("");
+    setDebouncedSearch("");
   }, [photo.id]);
+
+  // Debounce species search for taxonomy API calls (350ms)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(speciesSearch), 350);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [speciesSearch]);
 
   const { data: allSpecies } = useQuery<Species[]>({
     queryKey: ["admin-species"],
@@ -58,6 +68,15 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
       adminMeta.ebird(locationCoords!.lat, locationCoords!.lng) as Promise<EbirdSpecies[]>,
     enabled: !!locationCoords,
     staleTime: 5 * 60 * 1000,
+  });
+
+  // Global eBird taxonomy search — fires on debounced input, used for spelling validation
+  const debouncedQ = debouncedSearch.toLowerCase();
+  const { data: taxonomyResults, isFetching: taxonomyFetching } = useQuery<EbirdSpecies[]>({
+    queryKey: ["ebird-taxonomy", debouncedSearch],
+    queryFn: () => adminMeta.ebirdFind(debouncedSearch) as Promise<EbirdSpecies[]>,
+    enabled: debouncedSearch.length >= 2,
+    staleTime: 10 * 60 * 1000, // 10 min — taxonomy rarely changes
   });
 
   const ebirdSciNames = new Set(
@@ -132,6 +151,17 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
     : [];
 
   const displayDbSpecies = sortedDbSpecies.slice(0, 8);
+
+  // Taxonomy results not already shown in DB or nearby-eBird sections
+  const ebirdNearbySciNames = new Set(
+    (ebirdSpecies ?? []).map((e) => e.scientific_name.toLowerCase())
+  );
+  const taxonomyOnlyMatches = (taxonomyResults ?? []).filter(
+    (e) =>
+      !dbSciNames.has(e.scientific_name.toLowerCase()) &&
+      !ebirdNearbySciNames.has(e.scientific_name.toLowerCase())
+  );
+
 
   // All currently tagged species (original + newly added in this session)
   const taggedSpecies = [
@@ -347,11 +377,42 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
                 </>
               )}
 
-              {displayDbSpecies.length === 0 && ebirdOnlyMatches.length === 0 && (
-                <p className="px-3 py-2 text-xs text-gray-500">
-                  No matches
-                  {!locationCoords && " — set a folder location to see eBird suggestions"}
-                </p>
+              {/* eBird global taxonomy matches (not in DB, not in nearby list) */}
+              {taxonomyOnlyMatches.length > 0 && (
+                <>
+                  {(displayDbSpecies.length > 0 || ebirdOnlyMatches.length > 0) && (
+                    <div className="border-t border-gray-700 mx-2 my-1" />
+                  )}
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider px-3 py-0.5">
+                    From eBird (global) — click to add &amp; tag
+                  </p>
+                  {taxonomyOnlyMatches.map((e) => (
+                    <button
+                      key={e.species_code}
+                      onMouseDown={(ev) => ev.preventDefault()}
+                      onClick={() => createAndTag.mutate(e)}
+                      disabled={createAndTag.isPending}
+                      className="w-full text-left px-3 py-1.5 text-sm text-gray-400 hover:bg-gray-700 flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <span className="text-blue-400 text-xs shrink-0">🌍</span>
+                      <span className="flex-1 truncate">
+                        {e.common_name}
+                        {e.scientific_name && (
+                          <span className="text-gray-500 italic ml-1 text-xs">{e.scientific_name}</span>
+                        )}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {/* Loading indicator while taxonomy query is in flight */}
+              {taxonomyFetching && displayDbSpecies.length === 0 && ebirdOnlyMatches.length === 0 && (
+                <p className="px-3 py-2 text-xs text-gray-500">Searching eBird…</p>
+              )}
+
+              {displayDbSpecies.length === 0 && ebirdOnlyMatches.length === 0 && taxonomyOnlyMatches.length === 0 && !taxonomyFetching && (
+                <p className="px-3 py-2 text-xs text-gray-500">No matches in eBird</p>
               )}
             </div>
           )}

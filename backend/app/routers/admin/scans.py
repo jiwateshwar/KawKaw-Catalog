@@ -204,6 +204,56 @@ async def geocode_search(
     ]
 
 
+@router.get("/ebird/find")
+async def ebird_find(
+    q: str = Query(min_length=2),
+    _: User = Depends(get_current_user),
+):
+    """
+    Search the global eBird taxonomy by name — spelling validation and
+    finding species not recently observed in the local area.
+    Results are cached in Redis for 30 days.
+    """
+    key = f"ebird:taxon:{q.lower()}"
+
+    # Cache read
+    try:
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        cached = await r.get(key)
+        await r.aclose()
+        if cached is not None:
+            return json.loads(cached)
+    except Exception:
+        pass
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            "https://api.ebird.org/v2/ref/taxon/find",
+            params={"q": q, "locale": "en", "maxResults": 8, "cat": "species"},
+            headers={"X-eBirdApiToken": settings.EBIRD_API_KEY},
+        )
+    if resp.status_code != 200:
+        return []
+    result = [
+        {
+            "species_code": r["speciesCode"],
+            "common_name": r["name"],
+            "scientific_name": r.get("sciName", ""),
+        }
+        for r in resp.json()
+    ]
+
+    # Cache write (non-fatal)
+    try:
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        await r.setex(key, _EBIRD_CACHE_TTL, json.dumps(result))
+        await r.aclose()
+    except Exception:
+        pass
+
+    return result
+
+
 @router.get("/ebird")
 async def ebird_nearby(
     lat: float,

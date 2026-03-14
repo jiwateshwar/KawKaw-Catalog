@@ -179,6 +179,8 @@ export const adminMeta = {
     request(`/admin/geocode?q=${encodeURIComponent(q)}`),
   ebird: (lat: number, lng: number, dist = 50) =>
     request(`/admin/ebird?lat=${lat}&lng=${lng}&dist=${dist}`),
+  ebirdFind: (q: string) =>
+    request(`/admin/ebird/find?q=${encodeURIComponent(q)}`),
 };
 
 // Helper: remove undefined values from params object
