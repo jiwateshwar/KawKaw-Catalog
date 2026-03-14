@@ -4,7 +4,7 @@ import { PhotoGrid } from "@/components/public/PhotoGrid";
 import type { Species, PhotoPage } from "@/types/api";
 
 async function getData(id: string) {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000/api";
+  const base = `${process.env.INTERNAL_API_URL ?? "http://api:8000"}/api`;
   const [spRes, photosRes] = await Promise.all([
     fetch(`${base}/species/${id}`, { next: { revalidate: 120 } }),
     fetch(`${base}/species/${id}/photos?limit=48`, { next: { revalidate: 60 } }),
@@ -16,8 +16,9 @@ async function getData(id: string) {
   };
 }
 
-export default async function SpeciesDetailPage({ params }: { params: { id: string } }) {
-  const data = await getData(params.id);
+export default async function SpeciesDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const data = await getData(id);
   if (!data) notFound();
   const { species, photos } = data;
 

@@ -3,7 +3,7 @@ import { TripCard } from "@/components/public/TripCard";
 import type { Trip } from "@/types/api";
 
 async function getTrips(): Promise<Trip[]> {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000/api";
+  const base = `${process.env.INTERNAL_API_URL ?? "http://api:8000"}/api`;
   const res = await fetch(`${base}/trips?limit=50`, { next: { revalidate: 120 } });
   if (!res.ok) return [];
   return res.json();

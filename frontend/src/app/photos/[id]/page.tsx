@@ -5,14 +5,15 @@ import type { Photo } from "@/types/api";
 import { format } from "date-fns";
 
 async function getPhoto(id: string): Promise<Photo | null> {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000/api";
+  const base = `${process.env.INTERNAL_API_URL ?? "http://api:8000"}/api`;
   const res = await fetch(`${base}/photos/${id}`, { next: { revalidate: 60 } });
   if (!res.ok) return null;
   return res.json();
 }
 
-export default async function PhotoPage({ params }: { params: { id: string } }) {
-  const photo = await getPhoto(params.id);
+export default async function PhotoPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const photo = await getPhoto(id);
   if (!photo) notFound();
 
   return (

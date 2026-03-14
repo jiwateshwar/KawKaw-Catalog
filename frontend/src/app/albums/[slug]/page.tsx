@@ -4,7 +4,7 @@ import { PhotoGrid } from "@/components/public/PhotoGrid";
 import type { Album, PhotoPage } from "@/types/api";
 
 async function getData(slug: string) {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000/api";
+  const base = `${process.env.INTERNAL_API_URL ?? "http://api:8000"}/api`;
   const [albumRes, photosRes] = await Promise.all([
     fetch(`${base}/albums/${slug}`, { next: { revalidate: 120 } }),
     fetch(`${base}/albums/${slug}/photos?limit=48`, { next: { revalidate: 60 } }),
@@ -16,8 +16,9 @@ async function getData(slug: string) {
   };
 }
 
-export default async function AlbumPage({ params }: { params: { slug: string } }) {
-  const data = await getData(params.slug);
+export default async function AlbumPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const data = await getData(slug);
   if (!data) notFound();
   const { album, photos } = data;
 

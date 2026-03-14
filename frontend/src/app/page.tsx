@@ -4,7 +4,7 @@ import { TripCard } from "@/components/public/TripCard";
 import type { Photo, Trip, Species } from "@/types/api";
 
 async function getData() {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000/api";
+  const base = `${process.env.INTERNAL_API_URL ?? "http://api:8000"}/api`;
 
   const [featuredRes, recentRes, tripsRes, speciesRes] = await Promise.allSettled([
     fetch(`${base}/photos/featured?limit=1`, { next: { revalidate: 300 } }),

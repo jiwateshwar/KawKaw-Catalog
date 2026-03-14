@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(del \"c:/Users/jiwat/Desktop/VS Projects/KawKaw Catalog/frontend/next.config.ts\")"
+    ]
+  }
+}

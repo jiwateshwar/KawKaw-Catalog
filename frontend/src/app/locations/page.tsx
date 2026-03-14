@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { Location } from "@/types/api";
 
 async function getLocations(): Promise<Location[]> {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000/api";
+  const base = `${process.env.INTERNAL_API_URL ?? "http://api:8000"}/api`;
   const res = await fetch(`${base}/locations`, { next: { revalidate: 120 } });
   if (!res.ok) return [];
   return res.json();

@@ -5,7 +5,7 @@ import type { Trip, PhotoPage } from "@/types/api";
 import { format } from "date-fns";
 
 async function getData(id: string) {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000/api";
+  const base = `${process.env.INTERNAL_API_URL ?? "http://api:8000"}/api`;
   const [tripRes, photosRes] = await Promise.all([
     fetch(`${base}/trips/${id}`, { next: { revalidate: 120 } }),
     fetch(`${base}/trips/${id}/photos?limit=48`, { next: { revalidate: 60 } }),
@@ -17,8 +17,9 @@ async function getData(id: string) {
   };
 }
 
-export default async function TripPage({ params }: { params: { id: string } }) {
-  const data = await getData(params.id);
+export default async function TripPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const data = await getData(id);
   if (!data) notFound();
   const { trip, photos } = data;
 
