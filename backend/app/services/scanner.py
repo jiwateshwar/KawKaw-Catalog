@@ -168,12 +168,6 @@ async def scan_folder(
     if location_id:
         loc = await db.get(Location, location_id)
         if loc:
-            count = await db.scalar(
-                select(Photo).where(Photo.location_id == location_id).with_only_columns(  # type: ignore
-                    [Photo.id]
-                )
-            )
-            # Simple increment is fine for now
             loc.photo_count = loc.photo_count + result.files_imported
             await db.commit()
 
