@@ -16,6 +16,7 @@ version: "3.9"
 #   POSTGRES_USER       kawkaw
 #   POSTGRES_DB         kawkaw
 #   MEDIA_HOST_PATH     /mnt/truenas_photos   (host path of mounted SMB share)
+#   SITE_URL            http://localhost:8080  (public URL — used for OG tags + WhatsApp share links)
 # ─────────────────────────────────────────────────────────────────────────────
 
 x-api-env: &api-env
@@ -75,6 +76,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
       INTERNAL_API_URL: http://api:8000
+      SITE_URL: ${SITE_URL:-http://localhost:8080}
     depends_on:
       - api
     restart: unless-stopped
