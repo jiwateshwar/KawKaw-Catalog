@@ -97,14 +97,26 @@ async def get_og_image(photo_id: int, db: AsyncSession = Depends(get_db)):
     if not os.path.exists(abs_path):
         raise HTTPException(status_code=404, detail="Thumbnail file not found")
 
-    def _to_jpeg() -> bytes:
+    # Cache the converted JPEG alongside the WebP so repeat fetches skip Pillow entirely
+    og_path = abs_path.replace("_md.webp", "_og.jpg")
+
+    def _get_jpeg() -> bytes:
+        if os.path.exists(og_path):
+            with open(og_path, "rb") as f:
+                return f.read()
         from PIL import Image
         img = Image.open(abs_path).convert("RGB")
         buf = BytesIO()
         img.save(buf, "JPEG", quality=85, optimize=True)
-        return buf.getvalue()
+        data = buf.getvalue()
+        try:
+            with open(og_path, "wb") as f:
+                f.write(data)
+        except OSError:
+            pass  # cache write failure is non-fatal
+        return data
 
-    jpeg_bytes = await asyncio.to_thread(_to_jpeg)
+    jpeg_bytes = await asyncio.to_thread(_get_jpeg)
     return Response(
         content=jpeg_bytes,
         media_type="image/jpeg",

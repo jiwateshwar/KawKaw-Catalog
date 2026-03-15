@@ -95,6 +95,11 @@ def generate_thumbnails(self, photo_id: int) -> None:
                     thumb = make_thumbnail(img, max_width)
                     save_webp(thumb, paths[size_name])
 
+                # Pre-generate OG JPEG (1200px) so the og-image endpoint is instant on first hit
+                og_thumb = make_thumbnail(img, 1200).convert("RGB")
+                og_path = os.path.join(os.path.dirname(paths["md"]), f"{sha}_og.jpg")
+                og_thumb.save(og_path, "JPEG", quality=85, optimize=True)
+
                 # Append a cache-busting version so browsers don't serve stale
                 # thumbnails after a crop regeneration (nginx ignores query params
                 # when serving static files, but the browser sees a new URL).
