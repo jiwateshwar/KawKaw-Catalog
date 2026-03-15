@@ -11,7 +11,7 @@ from app.schemas.photo import PhotoOut, PhotoPage
 router = APIRouter(prefix="/api/photos", tags=["public-photos"])
 
 
-def _photo_to_out(photo: Photo) -> PhotoOut:
+def _photo_to_out(photo: Photo, *, has_album: bool = False) -> PhotoOut:
     species = [
         {"id": ps.species.id, "common_name": ps.species.common_name, "scientific_name": ps.species.scientific_name}
         for ps in photo.species_links
@@ -24,6 +24,7 @@ def _photo_to_out(photo: Photo) -> PhotoOut:
         thumb_md_url=photo.thumb_md_path,
         thumb_lg_url=photo.thumb_lg_path,
         species=species,
+        has_album=has_album,
     )
 
 

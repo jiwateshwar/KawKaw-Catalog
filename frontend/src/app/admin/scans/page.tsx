@@ -61,8 +61,7 @@ export default function BrowsePage() {
   const [folderLocation, setFolderLocation] = useState<FolderLocation | null>(null);
   const [folderDate, setFolderDate] = useState("");
 
-  // Album + trip creation
-  const [createAlbum, setCreateAlbum] = useState(false);
+  // Album + trip creation (album always shown, not hidden behind checkbox)
   const [albumName, setAlbumName] = useState("");
   const [albumTripId, setAlbumTripId] = useState<"" | number | "new">("");
   const [newTripName, setNewTripName] = useState("");
@@ -157,6 +156,7 @@ export default function BrowsePage() {
             thumb_status: fresh.thumb_status,
             width: fresh.width,
             height: fresh.height,
+            has_album: fresh.has_album,
           };
         })
       );
@@ -208,8 +208,8 @@ export default function BrowsePage() {
         );
       }
 
-      // 2. Optionally create album and link all folder photos to it
-      if (createAlbum && albumName.trim()) {
+      // 2. Create album (if name provided) and link all folder photos to it
+      if (albumName.trim()) {
         let tripId: number | null = null;
 
         if (albumTripId === "new" && newTripName.trim()) {
@@ -238,6 +238,8 @@ export default function BrowsePage() {
       return result;
     },
     onSuccess: () => {
+      // Force a full reset so has_album and location_id update in the photo rows
+      folderLoadedRef.current = null;
       qc.invalidateQueries({ queryKey: ["folder-photos", selectedFolderPath] });
       qc.invalidateQueries({ queryKey: ["admin-locations"] });
       qc.invalidateQueries({ queryKey: ["browse", browsePath] });
@@ -276,7 +278,6 @@ export default function BrowsePage() {
     setLocalPhotos([]);
     folderLoadedRef.current = null;
     setPendingJobId(null);
-    setCreateAlbum(false);
     setAlbumTripId("");
     setNewTripName("");
   };
@@ -370,7 +371,7 @@ export default function BrowsePage() {
 
               {/* Folder settings */}
               <div className="px-5 py-3 border-b border-gray-800 bg-gray-900/20 shrink-0 space-y-2">
-                {/* Row 1: Location + Date + Apply */}
+                {/* Row 1: Location + Date */}
                 <div className="flex items-end gap-3">
                   <div className="flex-1 min-w-0">
                     <label className="block text-xs text-gray-500 mb-1">Location</label>
@@ -389,71 +390,56 @@ export default function BrowsePage() {
                       className="bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500"
                     />
                   </div>
+                </div>
+
+                {/* Row 2: Album (always visible) + Trip + Save button */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-xs text-gray-500 shrink-0">Album:</span>
+                  <input
+                    value={albumName}
+                    onChange={(e) => setAlbumName(e.target.value)}
+                    placeholder="Album name (leave blank to skip)…"
+                    className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500"
+                  />
+                  <select
+                    value={String(albumTripId)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setAlbumTripId(v === "" ? "" : v === "new" ? "new" : Number(v));
+                      if (v !== "new") setNewTripName("");
+                    }}
+                    className="shrink-0 bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500"
+                  >
+                    <option value="">— No trip —</option>
+                    {trips?.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title}
+                      </option>
+                    ))}
+                    <option value="new">+ New trip…</option>
+                  </select>
+                  {albumTripId === "new" && (
+                    <input
+                      value={newTripName}
+                      onChange={(e) => setNewTripName(e.target.value)}
+                      placeholder="New trip name…"
+                      className="flex-1 min-w-32 bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500"
+                    />
+                  )}
                   <button
                     onClick={() => applyToFolder.mutate()}
-                    disabled={
-                      applyToFolder.isPending ||
-                      (!folderLocation && !folderDate && !createAlbum)
-                    }
+                    disabled={applyToFolder.isPending}
                     className="shrink-0 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white text-xs px-3 py-1.5 rounded transition-colors whitespace-nowrap"
                   >
-                    {applyToFolder.isPending ? "Applying…" : "Apply to all"}
+                    {applyToFolder.isPending ? "Saving…" : "Save Folder Settings"}
                   </button>
                 </div>
 
-                {/* Row 2: Album + Trip */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <label className="flex items-center gap-2 cursor-pointer shrink-0">
-                    <input
-                      type="checkbox"
-                      checked={createAlbum}
-                      onChange={(e) => setCreateAlbum(e.target.checked)}
-                      className="rounded"
-                    />
-                    <span className="text-xs text-gray-400">Create album:</span>
-                  </label>
-                  {createAlbum && (
-                    <>
-                      <input
-                        value={albumName}
-                        onChange={(e) => setAlbumName(e.target.value)}
-                        placeholder="Album name…"
-                        className="flex-1 min-w-32 bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500"
-                      />
-                      <select
-                        value={String(albumTripId)}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setAlbumTripId(v === "" ? "" : v === "new" ? "new" : Number(v));
-                          if (v !== "new") setNewTripName("");
-                        }}
-                        className="shrink-0 bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500"
-                      >
-                        <option value="">— No trip —</option>
-                        {trips?.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.title}
-                          </option>
-                        ))}
-                        <option value="new">+ New trip…</option>
-                      </select>
-                      {albumTripId === "new" && (
-                        <input
-                          value={newTripName}
-                          onChange={(e) => setNewTripName(e.target.value)}
-                          placeholder="New trip name…"
-                          className="flex-1 min-w-32 bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500"
-                        />
-                      )}
-                    </>
-                  )}
-                </div>
-
                 {applyToFolder.isSuccess && (
-                  <p className="text-xs text-green-400">Applied to all photos in this folder.</p>
+                  <p className="text-xs text-green-400">Folder settings saved — photos updated.</p>
                 )}
                 {applyToFolder.isError && (
-                  <p className="text-xs text-red-400">Failed to apply. Try again.</p>
+                  <p className="text-xs text-red-400">Failed to save. Try again.</p>
                 )}
               </div>
 
@@ -521,7 +507,11 @@ export default function BrowsePage() {
         <CropModal
           photo={cropPhoto}
           onClose={() => setCropPhoto(null)}
-          onSaved={updatePhoto}
+          onSaved={(updated) => {
+            updatePhoto(updated);
+            // Refetch immediately so thumb polling kicks in right away
+            qc.invalidateQueries({ queryKey: ["folder-photos", selectedFolderPath] });
+          }}
         />
       )}
     </>
@@ -840,15 +830,21 @@ function PhotoRow({
             )}
           </div>
 
-          {/* Published toggle */}
-          <label className="flex items-center gap-1.5 cursor-pointer shrink-0 pt-0.5">
+          {/* Published toggle — requires photo to be in an album first */}
+          <label
+            className={`flex items-center gap-1.5 shrink-0 pt-0.5 ${photo.has_album ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+            title={photo.has_album ? undefined : "Save folder settings with an album name first"}
+          >
             <input
               type="checkbox"
               checked={photo.is_published}
+              disabled={!photo.has_album}
               onChange={(e) => handlePublishChange(e.target.checked)}
               className="rounded"
             />
-            <span className="text-xs text-gray-400">Published</span>
+            <span className="text-xs text-gray-400">
+              {photo.has_album ? "Published" : "No album"}
+            </span>
           </label>
         </div>
       </div>

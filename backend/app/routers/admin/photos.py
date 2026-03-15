@@ -30,7 +30,10 @@ async def list_photos_admin(
 ):
     q = (
         select(Photo)
-        .options(selectinload(Photo.species_links).selectinload(PhotoSpecies.species))
+        .options(
+            selectinload(Photo.species_links).selectinload(PhotoSpecies.species),
+            selectinload(Photo.album_links),
+        )
         .order_by(Photo.imported_at.desc(), Photo.id.desc())
         .limit(limit + 1)
     )
@@ -50,7 +53,7 @@ async def list_photos_admin(
 
     rows = (await db.execute(q)).scalars().all()
     has_more = len(rows) > limit
-    items = [_photo_to_out(p) for p in rows[:limit]]
+    items = [_photo_to_out(p, has_album=bool(p.album_links)) for p in rows[:limit]]
     return PhotoPage(items=items, next_cursor=items[-1].id if has_more else None)
 
 
@@ -63,12 +66,15 @@ async def get_photo_admin(
     q = (
         select(Photo)
         .where(Photo.id == photo_id)
-        .options(selectinload(Photo.species_links).selectinload(PhotoSpecies.species))
+        .options(
+            selectinload(Photo.species_links).selectinload(PhotoSpecies.species),
+            selectinload(Photo.album_links),
+        )
     )
     photo = await db.scalar(q)
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
-    return _photo_to_out(photo)
+    return _photo_to_out(photo, has_album=bool(photo.album_links))
 
 
 @router.patch("/{photo_id}", response_model=PhotoOut)
@@ -99,10 +105,13 @@ async def update_photo(
     q = (
         select(Photo)
         .where(Photo.id == photo_id)
-        .options(selectinload(Photo.species_links).selectinload(PhotoSpecies.species))
+        .options(
+            selectinload(Photo.species_links).selectinload(PhotoSpecies.species),
+            selectinload(Photo.album_links),
+        )
     )
     photo = await db.scalar(q)
-    return _photo_to_out(photo)
+    return _photo_to_out(photo, has_album=bool(photo.album_links))
 
 
 @router.post("/{photo_id}/species", response_model=PhotoOut)
@@ -139,10 +148,13 @@ async def set_photo_species(
     q = (
         select(Photo)
         .where(Photo.id == photo_id)
-        .options(selectinload(Photo.species_links).selectinload(PhotoSpecies.species))
+        .options(
+            selectinload(Photo.species_links).selectinload(PhotoSpecies.species),
+            selectinload(Photo.album_links),
+        )
     )
     photo = await db.scalar(q)
-    return _photo_to_out(photo)
+    return _photo_to_out(photo, has_album=bool(photo.album_links))
 
 
 @router.post("/{photo_id}/crop", response_model=PhotoOut)
@@ -171,10 +183,13 @@ async def set_crop(
     q = (
         select(Photo)
         .where(Photo.id == photo_id)
-        .options(selectinload(Photo.species_links).selectinload(PhotoSpecies.species))
+        .options(
+            selectinload(Photo.species_links).selectinload(PhotoSpecies.species),
+            selectinload(Photo.album_links),
+        )
     )
     photo = await db.scalar(q)
-    return _photo_to_out(photo)
+    return _photo_to_out(photo, has_album=bool(photo.album_links))
 
 
 @router.post("/bulk-publish")

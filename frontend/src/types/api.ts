@@ -35,6 +35,7 @@ export interface Photo {
   trip_id: number | null;
   imported_at: string;
   species: SpeciesTag[];
+  has_album: boolean;
 }
 
 export interface PhotoPage {

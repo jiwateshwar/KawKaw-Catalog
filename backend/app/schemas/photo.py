@@ -42,6 +42,7 @@ class PhotoOut(BaseModel):
     trip_id: int | None
     imported_at: datetime
     species: list[SpeciesTag] = []
+    has_album: bool = False
 
     model_config = {"from_attributes": True}
 
