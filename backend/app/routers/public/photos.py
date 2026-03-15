@@ -1,8 +1,14 @@
+import asyncio
+import os
+from io import BytesIO
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.deps import get_db
 from app.models.photo import Photo, PhotoSpecies
 from app.models.species import Species
@@ -72,6 +78,38 @@ async def featured_photos(
     )
     rows = (await db.execute(q)).scalars().all()
     return [_photo_to_out(p) for p in rows]
+
+
+@router.get("/{photo_id}/og-image", response_class=Response)
+async def get_og_image(photo_id: int, db: AsyncSession = Depends(get_db)):
+    """Return a JPEG version of the medium thumbnail for social-share link previews."""
+    photo = await db.scalar(
+        select(Photo).where(Photo.id == photo_id, Photo.is_published == True)  # noqa: E712
+    )
+    if not photo or not photo.thumb_md_path:
+        raise HTTPException(status_code=404, detail="No thumbnail")
+
+    # Derive filesystem path from stored URL (strip ?v= cache-buster suffix)
+    url_path = photo.thumb_md_path.split("?")[0]
+    relative = url_path.removeprefix(settings.THUMBS_URL_PREFIX)
+    abs_path = settings.THUMBS_ROOT + relative
+
+    if not os.path.exists(abs_path):
+        raise HTTPException(status_code=404, detail="Thumbnail file not found")
+
+    def _to_jpeg() -> bytes:
+        from PIL import Image
+        img = Image.open(abs_path).convert("RGB")
+        buf = BytesIO()
+        img.save(buf, "JPEG", quality=85, optimize=True)
+        return buf.getvalue()
+
+    jpeg_bytes = await asyncio.to_thread(_to_jpeg)
+    return Response(
+        content=jpeg_bytes,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @router.get("/{photo_id}", response_model=PhotoOut)
