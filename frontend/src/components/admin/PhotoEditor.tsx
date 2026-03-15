@@ -61,12 +61,19 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
     queryFn: () => adminTrips.list() as Promise<Trip[]>,
   });
 
-  // eBird species observed near the folder's location
+  // Derive coords from the selected location dropdown, falling back to the folder-level prop
+  const selectedLocation = locations?.find((l) => l.id === locationId);
+  const effectiveCoords =
+    selectedLocation?.latitude != null && selectedLocation?.longitude != null
+      ? { lat: selectedLocation.latitude, lng: selectedLocation.longitude }
+      : locationCoords;
+
+  // eBird species observed near the effective location (selected dropdown or folder-level)
   const { data: ebirdSpecies } = useQuery<EbirdSpecies[]>({
-    queryKey: ["ebird-species", locationCoords?.lat, locationCoords?.lng],
+    queryKey: ["ebird-species", effectiveCoords?.lat, effectiveCoords?.lng],
     queryFn: () =>
-      adminMeta.ebird(locationCoords!.lat, locationCoords!.lng) as Promise<EbirdSpecies[]>,
-    enabled: !!locationCoords,
+      adminMeta.ebird(effectiveCoords!.lat, effectiveCoords!.lng) as Promise<EbirdSpecies[]>,
+    enabled: !!effectiveCoords,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -124,7 +131,7 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
     ) ?? [];
 
   // eBird-known DB species float to top
-  const sortedDbSpecies = locationCoords
+  const sortedDbSpecies = effectiveCoords
     ? [...filteredDbSpecies].sort((a, b) => {
         const aE = ebirdSciNames.has((a.scientific_name ?? "").toLowerCase());
         const bE = ebirdSciNames.has((b.scientific_name ?? "").toLowerCase());
@@ -173,7 +180,7 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
   ];
 
   return (
-    <aside className="w-80 bg-gray-900 border-l border-gray-800 flex flex-col h-full overflow-auto">
+    <aside className="w-80 bg-gray-900 border-l border-gray-800 flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-800">
         <h2 className="font-medium text-sm">Edit Photo</h2>
@@ -197,7 +204,7 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
         )}
       </div>
 
-      <div className="p-4 space-y-4 flex-1">
+      <div className="p-4 space-y-4 flex-1 overflow-auto">
         {/* Publish / Feature toggles */}
         <div className="flex gap-4">
           <label className="flex items-center gap-2 cursor-pointer">
@@ -281,7 +288,7 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
         <div>
           <label className="block text-xs text-gray-500 mb-1">
             Species
-            {locationCoords && ebirdSpecies && ebirdSpecies.length > 0 && (
+            {effectiveCoords && ebirdSpecies && ebirdSpecies.length > 0 && (
               <span className="ml-1.5 text-brand-500 font-normal">
                 · {ebirdSpecies.length} species known nearby
               </span>
@@ -311,7 +318,7 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
             value={speciesSearch}
             onChange={(e) => setSpeciesSearch(e.target.value)}
             placeholder={
-              locationCoords && ebirdSpecies?.length
+              effectiveCoords && ebirdSpecies?.length
                 ? "Search — eBird nearby species shown first…"
                 : "Search species…"
             }

@@ -160,8 +160,13 @@ async def scan_folder(
             continue
 
         result.files_imported += 1
+        job.files_imported = result.files_imported
 
-    # Commit all new photos
+        # Commit every 10 photos so the frontend poll sees live progress
+        if result.files_imported % 10 == 0:
+            await db.commit()
+
+    # Final commit for any remaining uncommitted photos
     await db.commit()
 
     # Update location photo_count
