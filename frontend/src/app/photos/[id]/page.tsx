@@ -43,7 +43,9 @@ export async function generateMetadata({
       title,
       description,
       url: pageUrl,
-      images: photo.thumb_lg_url ? [{ url: photo.thumb_lg_url }] : [],
+      images: photo.thumb_lg_url
+        ? [{ url: photo.thumb_lg_url.startsWith("http") ? photo.thumb_lg_url : `${SITE_URL}${photo.thumb_lg_url}` }]
+        : [],
       type: "article",
     },
   };
