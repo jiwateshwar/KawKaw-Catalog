@@ -23,18 +23,27 @@ def extract_jpeg_exif(path: str) -> dict[str, Any]:
 
 
 def extract_raw_exif(path: str) -> dict[str, Any]:
-    """Extract minimal EXIF from a RAW file using rawpy."""
+    """Extract full EXIF from a RAW file via the embedded JPEG thumbnail."""
     try:
+        import io
+
         import rawpy
+        from PIL import Image
+        from PIL.ExifTags import TAGS
 
         with rawpy.imread(path) as raw:
-            # rawpy exposes very limited metadata; return what's available
-            return {
-                "CameraModel": getattr(raw, "camera_model", None),
-                "ColorDesc": getattr(raw, "color_desc", b"").decode("utf-8", errors="ignore"),
-            }
+            try:
+                thumb = raw.extract_thumb()
+                if thumb.format == rawpy.ThumbFormat.JPEG:
+                    img = Image.open(io.BytesIO(thumb.data))
+                    raw_exif = img._getexif()  # type: ignore[attr-defined]
+                    if raw_exif:
+                        return {TAGS.get(k, k): v for k, v in raw_exif.items()}
+            except Exception:
+                pass
     except Exception:
-        return {}
+        pass
+    return {}
 
 
 def parse_exif(raw_exif: dict[str, Any]) -> dict[str, Any]:

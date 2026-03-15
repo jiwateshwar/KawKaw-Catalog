@@ -69,9 +69,16 @@ export default function BrowsePage() {
   // Crop modal
   const [cropPhoto, setCropPhoto] = useState<Photo | null>(null);
 
+  // Sidebar collapse
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   // Local photo state — updated optimistically and merged with query refetches
   const [localPhotos, setLocalPhotos] = useState<Photo[]>([]);
   const folderLoadedRef = useRef<string | null>(null);
+
+  // Album auto-link: album created during this folder session
+  const [pendingAlbumId, setPendingAlbumId] = useState<number | null>(null);
+  const albumLinkedRef = useRef<Set<number>>(new Set());
 
   // Active scan job
   const [pendingJobId, setPendingJobId] = useState<number | null>(null);
@@ -141,7 +148,7 @@ export default function BrowsePage() {
     if (!photosPage) return;
     if (folderLoadedRef.current !== selectedFolderPath) {
       folderLoadedRef.current = selectedFolderPath;
-      setLocalPhotos(photosPage.items);
+      setLocalPhotos([...photosPage.items].sort((a, b) => a.filename.localeCompare(b.filename)));
     } else {
       // Thumb polling refetch — only update thumbnail fields to preserve in-progress edits
       setLocalPhotos((prev) =>
@@ -181,6 +188,18 @@ export default function BrowsePage() {
     }
   }, [scanJob?.status, scanJob, selectedFolderPath, browsePath, qc]);
 
+  // Auto-link photos to pending album whenever localPhotos changes
+  useEffect(() => {
+    if (!pendingAlbumId || localPhotos.length === 0) return;
+    const unlinked = localPhotos.map((p) => p.id).filter((id) => !albumLinkedRef.current.has(id));
+    if (unlinked.length === 0) return;
+    unlinked.forEach((id) => albumLinkedRef.current.add(id));
+    adminAlbums.addPhotos(pendingAlbumId, unlinked).then(() => {
+      folderLoadedRef.current = null;
+      qc.invalidateQueries({ queryKey: ["folder-photos", selectedFolderPath] });
+    });
+  }, [pendingAlbumId, localPhotos, selectedFolderPath]);
+
   // ── Mutations ────────────────────────────────────────────────────────────────
 
   const importMutation = useMutation({
@@ -208,7 +227,7 @@ export default function BrowsePage() {
         );
       }
 
-      // 2. Create album (if name provided) and link all folder photos to it
+      // 2. Create album (if name provided); photos are linked via the pendingAlbumId effect
       if (albumName.trim()) {
         let tripId: number | null = null;
 
@@ -227,10 +246,9 @@ export default function BrowsePage() {
           is_published: false,
         })) as Album;
 
-        const photoIds = localPhotos.map((p) => p.id);
-        if (photoIds.length > 0) {
-          await adminAlbums.addPhotos(album.id, photoIds);
-        }
+        // Store album ID — the auto-link effect will add current + future photos
+        setPendingAlbumId(album.id);
+        albumLinkedRef.current = new Set(); // reset so effect links all current photos
 
         qc.invalidateQueries({ queryKey: ["admin-albums"] });
       }
@@ -268,6 +286,8 @@ export default function BrowsePage() {
     setCropPhoto(null);
     setLocalPhotos([]);
     folderLoadedRef.current = null;
+    setPendingAlbumId(null);
+    albumLinkedRef.current = new Set();
   };
 
   const openFolder = (entry: DirectoryEntry) => {
@@ -280,6 +300,8 @@ export default function BrowsePage() {
     setPendingJobId(null);
     setAlbumTripId("");
     setNewTripName("");
+    setPendingAlbumId(null);
+    albumLinkedRef.current = new Set();
   };
 
   const pathParts = browsePath ? browsePath.split("/").filter(Boolean) : [];
@@ -290,65 +312,84 @@ export default function BrowsePage() {
     <>
       <div className="flex h-full overflow-hidden">
         {/* ── Left: Folder tree ───────────────────────────────────────────────── */}
-        <aside className="w-64 shrink-0 border-r border-gray-800 flex flex-col overflow-hidden bg-gray-950">
-          <div className="px-3 py-3 border-b border-gray-800 shrink-0">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-              Browse Media
-            </p>
-            <div className="flex items-center gap-1 flex-wrap text-xs">
-              <button
-                onClick={() => navigateTo("")}
-                className="text-brand-400 hover:underline"
-              >
-                Root
-              </button>
-              {pathParts.map((part, i) => (
-                <span key={i} className="flex items-center gap-1">
-                  <span className="text-gray-600">/</span>
-                  <button
-                    onClick={() => navigateTo(pathParts.slice(0, i + 1).join("/"))}
-                    className="text-brand-400 hover:underline truncate max-w-[80px]"
-                    title={part}
-                  >
-                    {part}
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {browsePath && (
-            <button
-              onClick={() => {
-                const parts = browsePath.split("/");
-                parts.pop();
-                navigateTo(parts.join("/"));
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-400 hover:text-white hover:bg-gray-800 border-b border-gray-800 shrink-0"
-            >
-              ← Back
-            </button>
-          )}
-
-          <div className="flex-1 overflow-auto">
-            {treeLoading ? (
-              <p className="text-xs text-gray-600 p-3">Loading…</p>
-            ) : entries?.length === 0 ? (
-              <p className="text-xs text-gray-600 p-3">Empty folder</p>
-            ) : (
-              <ul className="py-1">
-                {entries?.map((entry) => (
-                  <FolderRow
-                    key={entry.path}
-                    entry={entry}
-                    selected={selectedFolderPath === entry.path}
-                    onSelect={openFolder}
-                  />
+        {sidebarOpen ? (
+          <aside className="w-64 shrink-0 border-r border-gray-800 flex flex-col overflow-hidden bg-gray-950">
+            <div className="px-3 py-3 border-b border-gray-800 shrink-0">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  Browse Media
+                </p>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="text-gray-600 hover:text-gray-300 text-xs px-1"
+                  title="Hide sidebar"
+                >
+                  ◀
+                </button>
+              </div>
+              <div className="flex items-center gap-1 flex-wrap text-xs">
+                <button
+                  onClick={() => navigateTo("")}
+                  className="text-brand-400 hover:underline"
+                >
+                  Root
+                </button>
+                {pathParts.map((part, i) => (
+                  <span key={i} className="flex items-center gap-1">
+                    <span className="text-gray-600">/</span>
+                    <button
+                      onClick={() => navigateTo(pathParts.slice(0, i + 1).join("/"))}
+                      className="text-brand-400 hover:underline truncate max-w-[80px]"
+                      title={part}
+                    >
+                      {part}
+                    </button>
+                  </span>
                 ))}
-              </ul>
+              </div>
+            </div>
+
+            {browsePath && (
+              <button
+                onClick={() => {
+                  const parts = browsePath.split("/");
+                  parts.pop();
+                  navigateTo(parts.join("/"));
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-400 hover:text-white hover:bg-gray-800 border-b border-gray-800 shrink-0"
+              >
+                ← Back
+              </button>
             )}
-          </div>
-        </aside>
+
+            <div className="flex-1 overflow-auto">
+              {treeLoading ? (
+                <p className="text-xs text-gray-600 p-3">Loading…</p>
+              ) : entries?.filter((e) => e.is_dir).length === 0 ? (
+                <p className="text-xs text-gray-600 p-3">No subfolders</p>
+              ) : (
+                <ul className="py-1">
+                  {entries?.filter((e) => e.is_dir).map((entry) => (
+                    <FolderRow
+                      key={entry.path}
+                      entry={entry}
+                      selected={selectedFolderPath === entry.path}
+                      onSelect={openFolder}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </aside>
+        ) : (
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="shrink-0 w-7 border-r border-gray-800 bg-gray-950 flex items-start justify-center pt-3 text-gray-600 hover:text-gray-300 text-xs"
+            title="Show sidebar"
+          >
+            ▶
+          </button>
+        )}
 
         {/* ── Middle: Photo list ────────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -511,6 +552,12 @@ export default function BrowsePage() {
             updatePhoto(updated);
             // Refetch immediately so thumb polling kicks in right away
             qc.invalidateQueries({ queryKey: ["folder-photos", selectedFolderPath] });
+            // Auto-publish if photo is in an album and not yet published
+            if (updated.has_album && !updated.is_published) {
+              adminPhotos.update(updated.id, { is_published: true }).then((fresh) =>
+                updatePhoto(fresh as Photo)
+              );
+            }
           }}
         />
       )}
@@ -572,6 +619,7 @@ function PhotoRow({
       setShowDropdown(false);
       saveSpeciesMutation.mutate(newIds);
       qc.invalidateQueries({ queryKey: ["admin-species"] });
+      if (photo.has_album && !photo.is_published) saveMeta.mutate({ is_published: true });
     },
   });
 
@@ -581,6 +629,7 @@ function PhotoRow({
     setSpeciesSearch("");
     setShowDropdown(false);
     saveSpeciesMutation.mutate(newIds);
+    if (photo.has_album && !photo.is_published) saveMeta.mutate({ is_published: true });
   };
 
   const removeSpecies = (id: number) => {
@@ -631,6 +680,26 @@ function PhotoRow({
           .slice(0, 4)
       : [];
 
+  // Tier 3: global eBird taxonomy search (fires when ≥3 chars, no location needed)
+  const { data: globalTaxonomy } = useQuery<EbirdSpecies[]>({
+    queryKey: ["ebird-find", speciesSearch],
+    queryFn: () => adminMeta.ebirdFind(speciesSearch) as Promise<EbirdSpecies[]>,
+    enabled: showDropdown && speciesSearch.length >= 3,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const ebirdLocationCodes = new Set((ebirdSpecies ?? []).map((e) => e.species_code));
+  const globalOnlyMatches =
+    q.length >= 3
+      ? (globalTaxonomy ?? [])
+          .filter(
+            (e) =>
+              !ebirdLocationCodes.has(e.species_code) &&
+              !dbSciNames.has(e.scientific_name.toLowerCase())
+          )
+          .slice(0, 4)
+      : [];
+
   const taggedSpecies = [
     ...photo.species.filter((s) => speciesIds.includes(s.id)),
     ...(allSpecies?.filter(
@@ -641,7 +710,7 @@ function PhotoRow({
   const dropdownVisible =
     showDropdown &&
     speciesSearch.length >= 1 &&
-    (filteredDb.length > 0 || ebirdOnlyMatches.length > 0 || speciesSearch.length >= 2);
+    (filteredDb.length > 0 || ebirdOnlyMatches.length > 0 || globalOnlyMatches.length > 0 || speciesSearch.length >= 2);
 
   return (
     <div className="flex gap-4 px-5 py-3 border-b border-gray-800 hover:bg-gray-900/20 transition-colors">
@@ -711,7 +780,9 @@ function PhotoRow({
             onBlur={() => {
               const clean = title.trim() || null;
               if (clean !== (photo.title ?? null)) {
-                saveMeta.mutate({ title: clean });
+                const payload: Record<string, unknown> = { title: clean };
+                if (clean && photo.has_album && !photo.is_published) payload.is_published = true;
+                saveMeta.mutate(payload);
               }
             }}
             placeholder="Title…"
@@ -723,7 +794,9 @@ function PhotoRow({
             onBlur={() => {
               const clean = caption.trim() || null;
               if (clean !== (photo.caption ?? null)) {
-                saveMeta.mutate({ caption: clean });
+                const payload: Record<string, unknown> = { caption: clean };
+                if (clean && photo.has_album && !photo.is_published) payload.is_published = true;
+                saveMeta.mutate(payload);
               }
             }}
             placeholder="Caption…"
@@ -823,7 +896,37 @@ function PhotoRow({
                   </>
                 )}
 
-                {filteredDb.length === 0 && ebirdOnlyMatches.length === 0 && (
+                {globalOnlyMatches.length > 0 && (
+                  <>
+                    {(filteredDb.length > 0 || ebirdOnlyMatches.length > 0) && (
+                      <div className="border-t border-gray-700 mx-2 my-1" />
+                    )}
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider px-2.5 py-0.5">
+                      eBird Global — click to add &amp; tag
+                    </p>
+                    {globalOnlyMatches.map((e) => (
+                      <button
+                        key={e.species_code}
+                        onMouseDown={(ev) => ev.preventDefault()}
+                        onClick={() => createAndTag.mutate(e)}
+                        disabled={createAndTag.isPending}
+                        className="w-full text-left px-2.5 py-1.5 text-sm text-gray-400 hover:bg-gray-700 flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <span className="text-gray-500 text-xs shrink-0">🌐+</span>
+                        <span className="flex-1 truncate">
+                          {e.common_name}
+                          {e.scientific_name && (
+                            <span className="text-gray-500 italic ml-1 text-xs">
+                              {e.scientific_name}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                )}
+
+                {filteredDb.length === 0 && ebirdOnlyMatches.length === 0 && globalOnlyMatches.length === 0 && (
                   <p className="px-2.5 py-2 text-xs text-gray-500">No matches</p>
                 )}
               </div>
