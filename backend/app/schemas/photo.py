@@ -21,6 +21,10 @@ class PhotoOut(BaseModel):
     thumb_status: str
     width: int | None
     height: int | None
+    crop_x: float | None
+    crop_y: float | None
+    crop_w: float | None
+    crop_h: float | None
     captured_at: datetime | None
     camera_make: str | None
     camera_model: str | None
@@ -64,6 +68,13 @@ class PhotoPage(BaseModel):
     items: list[PhotoOut]
     next_cursor: int | None
     total: int | None = None
+
+
+class CropUpdate(BaseModel):
+    crop_x: float
+    crop_y: float
+    crop_w: float
+    crop_h: float
 
 
 class BulkFolderUpdate(BaseModel):

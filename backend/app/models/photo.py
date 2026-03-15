@@ -34,8 +34,12 @@ class Photo(Base):
     thumb_md_path: Mapped[str | None] = mapped_column(String(512))   # 1200px
     thumb_lg_path: Mapped[str | None] = mapped_column(String(512))   # 2400px
     thumb_status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|processing|done|error
-    width: Mapped[int | None] = mapped_column(Integer)               # source image width (px)
-    height: Mapped[int | None] = mapped_column(Integer)              # source image height (px)
+    width: Mapped[int | None] = mapped_column(Integer)               # source image width (px, after crop)
+    height: Mapped[int | None] = mapped_column(Integer)              # source image height (px, after crop)
+    crop_x: Mapped[float | None] = mapped_column(Numeric(5, 4))     # crop left edge (0–1)
+    crop_y: Mapped[float | None] = mapped_column(Numeric(5, 4))     # crop top edge (0–1)
+    crop_w: Mapped[float | None] = mapped_column(Numeric(5, 4))     # crop width fraction (0–1)
+    crop_h: Mapped[float | None] = mapped_column(Numeric(5, 4))     # crop height fraction (0–1)
 
     # EXIF / Camera metadata
     captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -11,7 +11,7 @@ from app.models.photo import Photo, PhotoSpecies
 from app.models.species import Species
 from app.models.user import User
 from app.routers.public.photos import _photo_to_out
-from app.schemas.photo import BulkFolderUpdate, BulkPublishRequest, PhotoOut, PhotoPage, PhotoSpeciesUpdate, PhotoUpdate
+from app.schemas.photo import BulkFolderUpdate, BulkPublishRequest, CropUpdate, PhotoOut, PhotoPage, PhotoSpeciesUpdate, PhotoUpdate
 
 router = APIRouter(prefix="/api/admin/photos", tags=["admin-photos"])
 
@@ -135,6 +135,38 @@ async def set_photo_species(
             )
             sp.photo_count = count or 0
     await db.commit()
+
+    q = (
+        select(Photo)
+        .where(Photo.id == photo_id)
+        .options(selectinload(Photo.species_links).selectinload(PhotoSpecies.species))
+    )
+    photo = await db.scalar(q)
+    return _photo_to_out(photo)
+
+
+@router.post("/{photo_id}/crop", response_model=PhotoOut)
+async def set_crop(
+    photo_id: int,
+    body: CropUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Save crop coordinates and re-queue thumbnail generation."""
+    from app.tasks.thumbnails import generate_thumbnails
+
+    photo = await db.get(Photo, photo_id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    photo.crop_x = body.crop_x
+    photo.crop_y = body.crop_y
+    photo.crop_w = body.crop_w
+    photo.crop_h = body.crop_h
+    photo.thumb_status = "pending"
+    await db.commit()
+
+    generate_thumbnails.delay(photo_id)
 
     q = (
         select(Photo)

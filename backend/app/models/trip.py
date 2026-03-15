@@ -28,3 +28,4 @@ class Trip(Base):
         "Photo", foreign_keys=[cover_photo_id], lazy="select"
     )
     photos: Mapped[list] = relationship("Photo", back_populates="trip", foreign_keys="Photo.trip_id", lazy="select")
+    albums: Mapped[list] = relationship("Album", back_populates="trip", lazy="select")

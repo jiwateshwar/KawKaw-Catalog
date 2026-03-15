@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { adminPhotos, adminSpecies, adminLocations, adminTrips, adminMeta } from "@/lib/api";
-import type { Photo, Species, Location, Trip, EbirdSpecies } from "@/types/api";
+import { adminPhotos, adminSpecies, adminLocations, adminMeta } from "@/lib/api";
+import type { Photo, Species, Location, EbirdSpecies } from "@/types/api";
 
 interface Props {
   photo: Photo;
@@ -20,7 +20,6 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
   const [isPublished, setIsPublished] = useState(photo.is_published);
   const [isFeatured, setIsFeatured] = useState(photo.is_featured);
   const [locationId, setLocationId] = useState<number | "">(photo.location_id ?? "");
-  const [tripId, setTripId] = useState<number | "">(photo.trip_id ?? "");
   const [speciesIds, setSpeciesIds] = useState<number[]>(photo.species.map((s) => s.id));
   const [speciesSearch, setSpeciesSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -33,7 +32,6 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
     setIsPublished(photo.is_published);
     setIsFeatured(photo.is_featured);
     setLocationId(photo.location_id ?? "");
-    setTripId(photo.trip_id ?? "");
     setSpeciesIds(photo.species.map((s) => s.id));
     setSpeciesSearch("");
     setDebouncedSearch("");
@@ -54,11 +52,6 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
   const { data: locations } = useQuery<Location[]>({
     queryKey: ["admin-locations"],
     queryFn: () => adminLocations.list() as Promise<Location[]>,
-  });
-
-  const { data: trips } = useQuery<Trip[]>({
-    queryKey: ["admin-trips"],
-    queryFn: () => adminTrips.list() as Promise<Trip[]>,
   });
 
   // Derive coords from the selected location dropdown, falling back to the folder-level prop
@@ -97,7 +90,6 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
         is_published: isPublished,
         is_featured: isFeatured,
         location_id: locationId || null,
-        trip_id: tripId || null,
       });
       await adminPhotos.setSpecies(photo.id, speciesIds);
       return (await adminPhotos.get(photo.id)) as Photo;
@@ -262,23 +254,6 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
             {locations?.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Trip */}
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Trip</label>
-          <select
-            value={tripId}
-            onChange={(e) => setTripId(e.target.value ? Number(e.target.value) : "")}
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
-          >
-            <option value="">— None —</option>
-            {trips?.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.title}
               </option>
             ))}
           </select>

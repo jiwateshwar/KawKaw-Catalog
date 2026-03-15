@@ -14,6 +14,10 @@ export interface Photo {
   thumb_status: "pending" | "processing" | "done" | "error";
   width: number | null;
   height: number | null;
+  crop_x: number | null;
+  crop_y: number | null;
+  crop_w: number | null;
+  crop_h: number | null;
   captured_at: string | null;
   camera_make: string | null;
   camera_model: string | null;
@@ -78,6 +82,7 @@ export interface Album {
   description: string | null;
   slug: string;
   cover_photo_id: number | null;
+  trip_id: number | null;
   sort_order: number;
   is_published: boolean;
   created_at: string;

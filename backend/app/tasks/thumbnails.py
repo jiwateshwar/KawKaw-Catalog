@@ -73,7 +73,16 @@ def generate_thumbnails(self, photo_id: int) -> None:
             try:
                 img = file_to_pil(abs_path, photo.file_type)
 
-                # Store source dimensions (after EXIF rotation) for layout detection
+                # Apply crop if stored (coordinates are 0–1 fractions of original size)
+                if photo.crop_x is not None:
+                    iw, ih = img.size
+                    left   = int(float(photo.crop_x) * iw)
+                    top    = int(float(photo.crop_y) * ih)
+                    right  = int((float(photo.crop_x) + float(photo.crop_w)) * iw)
+                    bottom = int((float(photo.crop_y) + float(photo.crop_h)) * ih)
+                    img = img.crop((left, top, right, bottom))
+
+                # Store dimensions (after EXIF rotation + crop) for layout detection
                 photo.width, photo.height = img.size
 
                 # Use SHA256 for thumbnail path; fall back to photo id

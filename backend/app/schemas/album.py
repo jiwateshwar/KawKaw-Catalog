@@ -9,6 +9,7 @@ class AlbumOut(BaseModel):
     description: str | None
     slug: str
     cover_photo_id: int | None
+    trip_id: int | None
     sort_order: int
     is_published: bool
     created_at: datetime
@@ -20,6 +21,7 @@ class AlbumCreate(BaseModel):
     title: str
     description: str | None = None
     slug: str
+    trip_id: int | None = None
     is_published: bool = False
 
 
@@ -28,6 +30,7 @@ class AlbumUpdate(BaseModel):
     description: str | None = None
     slug: str | None = None
     cover_photo_id: int | None = None
+    trip_id: int | None = None
     sort_order: int | None = None
     is_published: bool | None = None
 

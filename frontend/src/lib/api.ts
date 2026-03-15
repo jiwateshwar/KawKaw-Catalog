@@ -99,6 +99,11 @@ export const adminPhotos = {
       method: "POST",
       body: JSON.stringify({ species_ids }),
     }),
+  setCrop: (id: number, crop: { crop_x: number; crop_y: number; crop_w: number; crop_h: number }) =>
+    request(`/admin/photos/${id}/crop`, {
+      method: "POST",
+      body: JSON.stringify(crop),
+    }),
   bulkPublish: (photo_ids: number[], is_published: boolean) =>
     request("/admin/photos/bulk-publish", {
       method: "POST",
