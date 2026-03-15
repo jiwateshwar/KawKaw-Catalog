@@ -63,12 +63,14 @@ from app.routers.admin.albums import router as adm_albums
 from app.routers.admin.trips import router as adm_trips
 from app.routers.admin.locations import router as adm_locations
 from app.routers.admin.scans import router as adm_scans
+from app.routers.admin.settings import router as adm_settings
 app.include_router(adm_photos)
 app.include_router(adm_species)
 app.include_router(adm_albums)
 app.include_router(adm_trips)
 app.include_router(adm_locations)
 app.include_router(adm_scans)
+app.include_router(adm_settings)
 
 
 @app.get("/api/health")

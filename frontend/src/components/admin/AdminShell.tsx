@@ -14,6 +14,7 @@ const NAV = [
   { href: "/admin/albums", label: "Albums" },
   { href: "/admin/trips", label: "Trips" },
   { href: "/admin/scans", label: "Scans" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {

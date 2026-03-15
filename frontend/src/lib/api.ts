@@ -179,6 +179,15 @@ export const adminScans = {
   retryErrors: () => request("/admin/thumbnails/retry-errors", { method: "POST" }),
 };
 
+export const adminSettings = {
+  get: () => request("/admin/settings"),
+  update: (data: object) =>
+    request("/admin/settings", { method: "PATCH", body: JSON.stringify(data) }),
+  resetApp: () => request("/admin/settings/reset-app", { method: "POST" }),
+  resetContent: () => request("/admin/settings/reset-content", { method: "POST" }),
+  backupUrl: "/api/admin/settings/backup",
+};
+
 export const adminMeta = {
   geocode: (q: string) =>
     request(`/admin/geocode?q=${encodeURIComponent(q)}`),
