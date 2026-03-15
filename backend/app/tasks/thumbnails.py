@@ -9,6 +9,7 @@ Three sizes:
 from __future__ import annotations
 
 import os
+import time
 
 from app.config import settings
 from app.worker import celery_app
@@ -94,9 +95,13 @@ def generate_thumbnails(self, photo_id: int) -> None:
                     thumb = make_thumbnail(img, max_width)
                     save_webp(thumb, paths[size_name])
 
-                photo.thumb_sm_path = urls["sm"]
-                photo.thumb_md_path = urls["md"]
-                photo.thumb_lg_path = urls["lg"]
+                # Append a cache-busting version so browsers don't serve stale
+                # thumbnails after a crop regeneration (nginx ignores query params
+                # when serving static files, but the browser sees a new URL).
+                v = int(time.time())
+                photo.thumb_sm_path = f"{urls['sm']}?v={v}"
+                photo.thumb_md_path = f"{urls['md']}?v={v}"
+                photo.thumb_lg_path = f"{urls['lg']}?v={v}"
                 photo.thumb_status = "done"
 
             except Exception as exc:

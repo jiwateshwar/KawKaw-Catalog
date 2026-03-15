@@ -175,6 +175,7 @@ export default function BrowsePage() {
     if (!scanJob) return;
     if (scanJob.status === "done" || scanJob.status === "error") {
       setPendingJobId(null);
+      folderLoadedRef.current = null; // force full reset so newly imported photos appear
       qc.invalidateQueries({ queryKey: ["folder-photos", selectedFolderPath] });
       qc.invalidateQueries({ queryKey: ["browse", browsePath] });
     }

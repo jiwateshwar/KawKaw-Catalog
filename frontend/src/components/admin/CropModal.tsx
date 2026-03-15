@@ -12,38 +12,63 @@ interface Props {
   onSaved: (updated: Photo) => void;
 }
 
+type Preset = "free" | "landscape" | "portrait";
+
 export function CropModal({ photo, onClose, onSaved }: Props) {
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preset, setPreset] = useState<Preset>("free");
 
-  // react-easy-crop gives us the cropped area both in pixels and as percentages.
-  // We store the percentage-based (0–1) version which is independent of display size.
-  const onCropComplete = useCallback((_: Area, areaPixels: Area) => {
-    setCroppedAreaPixels(areaPixels);
+  const [normalizedCrop, setNormalizedCrop] = useState({
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
+  });
+
+  const onCropComplete = useCallback((percentageCrop: Area, _areaPixels: Area) => {
+    setNormalizedCrop({
+      x: percentageCrop.x / 100,
+      y: percentageCrop.y / 100,
+      width: percentageCrop.width / 100,
+      height: percentageCrop.height / 100,
+    });
   }, []);
 
   const imageUrl = photo.thumb_md_url ?? photo.thumb_sm_url;
 
-  async function handleSave() {
-    if (!croppedAreaPixels || !imageUrl) return;
+  // Aspect ratios derived from the photo's stored dimensions
+  // (these are post-EXIF-rotation so portrait/landscape is already correct)
+  const naturalW = photo.width ?? 4;
+  const naturalH = photo.height ?? 3;
+  const landscapeRatio = naturalW / naturalH;
+  const portraitRatio = naturalH / naturalW;
 
-    // We need pixel → fraction conversion. react-easy-crop only gives us
-    // pixel values relative to the natural image size when using a URL source,
-    // but because we use the md thumbnail (which may be smaller than original),
-    // we send the fraction computed from the cropper's own percentageCrop instead.
-    // We re-fire with the percentage version by storing it separately.
+  const aspectForPreset: Record<Preset, number | undefined> = {
+    free: undefined,
+    landscape: landscapeRatio,
+    portrait: portraitRatio,
+  };
+
+  const handlePreset = (p: Preset) => {
+    setPreset(p);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+  };
+
+  async function handleSave() {
+    if (!imageUrl) return;
     setSaving(true);
     setError(null);
     try {
-      const updated = await adminPhotos.setCrop(photo.id, {
+      const updated = (await adminPhotos.setCrop(photo.id, {
         crop_x: normalizedCrop.x,
         crop_y: normalizedCrop.y,
         crop_w: normalizedCrop.width,
         crop_h: normalizedCrop.height,
-      }) as Photo;
+      })) as Photo;
       onSaved(updated);
       onClose();
     } catch (e: unknown) {
@@ -52,19 +77,6 @@ export function CropModal({ photo, onClose, onSaved }: Props) {
       setSaving(false);
     }
   }
-
-  // We track the percentage-based crop from onCropComplete's first argument.
-  const [normalizedCrop, setNormalizedCrop] = useState({ x: 0, y: 0, width: 1, height: 1 });
-
-  const onCropCompleteWithPct = useCallback((percentageCrop: Area, areaPixels: Area) => {
-    setCroppedAreaPixels(areaPixels);
-    setNormalizedCrop({
-      x: percentageCrop.x / 100,
-      y: percentageCrop.y / 100,
-      width: percentageCrop.width / 100,
-      height: percentageCrop.height / 100,
-    });
-  }, []);
 
   if (!imageUrl) {
     return (
@@ -81,28 +93,62 @@ export function CropModal({ photo, onClose, onSaved }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-      <div className="bg-gray-900 rounded-lg flex flex-col" style={{ width: 680, maxHeight: "90vh" }}>
+      <div
+        className="bg-gray-900 rounded-lg flex flex-col"
+        style={{ width: 720, maxHeight: "90vh" }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
-          <h2 className="text-sm font-medium text-white">Crop Photo</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-white text-lg leading-none">
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-medium text-white">Crop Photo</h2>
+            <span className="text-xs text-gray-600 truncate max-w-64">{photo.filename}</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-white text-lg leading-none ml-4"
+          >
             ×
           </button>
         </div>
 
+        {/* Preset buttons */}
+        <div className="px-5 py-2.5 border-b border-gray-800 shrink-0 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500">Crop ratio:</span>
+          {(["free", "landscape", "portrait"] as Preset[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => handlePreset(p)}
+              className={`px-3 py-1 text-xs rounded transition-colors border ${
+                preset === p
+                  ? "bg-brand-600 border-brand-600 text-white"
+                  : "border-gray-700 text-gray-400 hover:text-white hover:border-gray-500"
+              }`}
+            >
+              {p === "free"
+                ? "Free"
+                : p === "landscape"
+                ? `Landscape (${naturalW}:${naturalH})`
+                : `Portrait (${naturalH}:${naturalW})`}
+            </button>
+          ))}
+          {photo.width && photo.height && (
+            <span className="ml-auto text-xs text-gray-600">
+              original {photo.width}×{photo.height}px
+            </span>
+          )}
+        </div>
+
         {/* Cropper area */}
-        <div className="relative bg-black" style={{ height: 420 }}>
+        <div className="relative bg-black flex-1" style={{ minHeight: 380 }}>
           <Cropper
             image={imageUrl}
             crop={crop}
             zoom={zoom}
-            aspect={undefined}
+            aspect={aspectForPreset[preset]}
             onCropChange={setCrop}
             onZoomChange={setZoom}
-            onCropComplete={onCropCompleteWithPct}
-            style={{
-              containerStyle: { background: "#000" },
-            }}
+            onCropComplete={onCropComplete}
+            style={{ containerStyle: { background: "#000" } }}
           />
         </div>
 
@@ -124,10 +170,10 @@ export function CropModal({ photo, onClose, onSaved }: Props) {
         {/* Footer */}
         <div className="px-5 py-3 flex items-center justify-between border-t border-gray-800 shrink-0">
           <p className="text-xs text-gray-500">
-            Saving crop will regenerate thumbnails.
+            Crop is applied to the original file — thumbnails will regenerate automatically.
           </p>
-          <div className="flex gap-2">
-            {error && <p className="text-red-400 text-xs self-center mr-2">{error}</p>}
+          <div className="flex items-center gap-2">
+            {error && <p className="text-red-400 text-xs">{error}</p>}
             <button
               onClick={onClose}
               className="px-4 py-1.5 text-sm text-gray-400 hover:text-white"
