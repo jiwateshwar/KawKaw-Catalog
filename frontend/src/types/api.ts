@@ -84,6 +84,8 @@ export interface Album {
   slug: string;
   cover_photo_id: number | null;
   trip_id: number | null;
+  location_id: number | null;
+  shoot_date: string | null;
   sort_order: number;
   is_published: boolean;
   created_at: string;

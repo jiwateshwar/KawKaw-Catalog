@@ -170,12 +170,24 @@ export default function BrowsePage() {
     }
   }, [photosPage, selectedFolderPath]);
 
-  // Pre-fill album name from folder name
+  // Auto-fill album name: "Location, Country - Date" when set; fall back to folder name.
+  // Tracks whether the user manually overrode it so we don't clobber their edits.
+  const albumNameAutoRef = useRef(true);
+  const prevFolderForAlbumRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (selectedFolderPath) {
-      setAlbumName(selectedFolderPath.split("/").pop() ?? "");
+    // Reset auto flag whenever the folder changes
+    if (prevFolderForAlbumRef.current !== selectedFolderPath) {
+      prevFolderForAlbumRef.current = selectedFolderPath;
+      albumNameAutoRef.current = true;
     }
-  }, [selectedFolderPath]);
+    if (!albumNameAutoRef.current || !selectedFolderPath) return;
+    const namePart = folderLocation
+      ? `${folderLocation.name}${folderLocation.country ? `, ${folderLocation.country}` : ""}`
+      : "";
+    const auto = [namePart, folderDate].filter(Boolean).join(" - ");
+    setAlbumName(auto || selectedFolderPath.split("/").pop() || "");
+  }, [folderLocation, folderDate, selectedFolderPath]);
 
   // Stop polling when scan finishes
   useEffect(() => {
@@ -243,6 +255,8 @@ export default function BrowsePage() {
           title: albumName.trim(),
           slug: slugify(albumName.trim()),
           trip_id: tripId,
+          location_id: result.location_id ?? (folderLocation?.isNew ? null : (folderLocation?.id ?? null)),
+          shoot_date: folderDate || null,
           is_published: false,
         })) as Album;
 
@@ -438,7 +452,7 @@ export default function BrowsePage() {
                   <span className="text-xs text-gray-500 shrink-0">Album:</span>
                   <input
                     value={albumName}
-                    onChange={(e) => setAlbumName(e.target.value)}
+                    onChange={(e) => { setAlbumName(e.target.value); albumNameAutoRef.current = false; }}
                     placeholder="Album name (leave blank to skip)…"
                     className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500"
                   />

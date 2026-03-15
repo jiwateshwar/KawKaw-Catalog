@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminTrips, adminLocations, adminAlbums } from "@/lib/api";
 import type { Trip, Location, Album } from "@/types/api";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
+
+type TripWithAlbums = Trip & { _albums: Album[]; _location: Location | null };
 
 export default function AdminTripsPage() {
   const qc = useQueryClient();
@@ -66,12 +68,169 @@ export default function AdminTripsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-albums"] }),
   });
 
-  // Albums not yet assigned to any trip
+  const locationMap = new Map((locations ?? []).map((l) => [l.id, l]));
+
+  const tripsEnriched: TripWithAlbums[] = (trips ?? []).map((t) => ({
+    ...t,
+    _albums: (albums ?? []).filter((a) => a.trip_id === t.id),
+    _location: t.location_id != null ? (locationMap.get(t.location_id) ?? null) : null,
+  }));
+
+  // Group trips by year of start_date; undated trips go last
+  const byYear = new Map<number, TripWithAlbums[]>();
+  const undatedTrips: TripWithAlbums[] = [];
+
+  for (const t of tripsEnriched) {
+    if (!t.start_date) {
+      undatedTrips.push(t);
+      continue;
+    }
+    const y = parseISO(t.start_date).getFullYear();
+    if (!byYear.has(y)) byYear.set(y, []);
+    byYear.get(y)!.push(t);
+  }
+
+  for (const arr of byYear.values()) {
+    arr.sort((a, b) => (b.start_date ?? "").localeCompare(a.start_date ?? ""));
+  }
+
+  const years = [...byYear.keys()].sort((a, b) => b - a);
   const unassignedAlbums = (albums ?? []).filter((a) => a.trip_id === null);
 
+  const renderTrip = (trip: TripWithAlbums) => {
+    const isExpanded = expandedTripId === trip.id;
+
+    return (
+      <div key={trip.id} className="relative flex gap-0">
+        {/* Timeline dot */}
+        <div className="absolute left-0 top-4 w-3 h-3 rounded-full bg-brand-500 border-2 border-gray-950 -translate-x-1/2 z-10" />
+
+        {/* Trip card */}
+        <div className="flex-1 ml-5 bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-medium text-white">{trip.title}</p>
+                {trip.is_published ? (
+                  <span className="text-[10px] bg-green-900/40 text-green-400 border border-green-700/30 px-1.5 py-0.5 rounded-full">
+                    Published
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-gray-800 text-gray-500 border border-gray-700 px-1.5 py-0.5 rounded-full">
+                    Draft
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap text-xs text-gray-500">
+                {trip.start_date && (
+                  <span>
+                    {format(parseISO(trip.start_date), "MMM d, yyyy")}
+                    {trip.end_date && trip.end_date !== trip.start_date && (
+                      <> — {format(parseISO(trip.end_date), "MMM d, yyyy")}</>
+                    )}
+                  </span>
+                )}
+                {trip._location && (
+                  <span>
+                    · {trip._location.name}
+                    {trip._location.country ? `, ${trip._location.country}` : ""}
+                  </span>
+                )}
+                {trip._albums.length > 0 ? (
+                  <button
+                    onClick={() => setExpandedTripId(isExpanded ? null : trip.id)}
+                    className="text-brand-400 hover:underline"
+                  >
+                    · {trip._albums.length} album{trip._albums.length !== 1 ? "s" : ""}
+                    {isExpanded ? " ▾" : " ▸"}
+                  </button>
+                ) : (
+                  <span>· No albums</span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0 pt-0.5">
+              <label className="flex items-center gap-1.5 text-sm text-gray-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={trip.is_published}
+                  onChange={(e) => togglePublish.mutate({ id: trip.id, val: e.target.checked })}
+                  className="rounded"
+                />
+                Published
+              </label>
+              <button
+                onClick={() => {
+                  if (confirm(`Delete "${trip.title}"?`)) remove.mutate(trip.id);
+                }}
+                className="text-red-500 hover:text-red-400 text-xs"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+
+          {/* Expanded albums panel */}
+          {isExpanded && (
+            <div className="border-t border-gray-800 bg-gray-950/40">
+              {trip._albums.length === 0 ? (
+                <p className="text-xs text-gray-600 px-10 py-3">No albums in this trip.</p>
+              ) : (
+                <ul className="divide-y divide-gray-800/60">
+                  {trip._albums.map((album) => (
+                    <li key={album.id} className="flex items-center gap-3 px-10 py-2">
+                      <span className="flex-1 text-sm text-gray-300">{album.title}</span>
+                      {album.shoot_date && (
+                        <span className="text-xs text-gray-600">
+                          {format(parseISO(album.shoot_date), "d MMM yyyy")}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-700">/albums/{album.slug}</span>
+                      <button
+                        onClick={() =>
+                          assignAlbumTrip.mutate({ albumId: album.id, tripId: null })
+                        }
+                        disabled={assignAlbumTrip.isPending}
+                        className="text-xs text-gray-500 hover:text-red-400 disabled:opacity-50"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {unassignedAlbums.length > 0 && (
+                <div className="px-10 py-2 border-t border-gray-800/60">
+                  <p className="text-[10px] text-gray-600 mb-1.5 uppercase tracking-wider">
+                    Add album to trip
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {unassignedAlbums.map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() =>
+                          assignAlbumTrip.mutate({ albumId: a.id, tripId: trip.id })
+                        }
+                        disabled={assignAlbumTrip.isPending}
+                        className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1 rounded border border-gray-700 disabled:opacity-50"
+                      >
+                        + {a.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-8 max-w-3xl">
+      <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Trips</h1>
         <button
           onClick={() => setCreating(true)}
@@ -82,7 +241,7 @@ export default function AdminTripsPage() {
       </div>
 
       {creating && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4 space-y-3">
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-8 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <label className="text-xs text-gray-500 block mb-1">Title *</label>
@@ -122,6 +281,7 @@ export default function AdminTripsPage() {
                 {locations?.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
+                    {l.country ? `, ${l.country}` : ""}
                   </option>
                 ))}
               </select>
@@ -152,161 +312,43 @@ export default function AdminTripsPage() {
       )}
 
       {isLoading ? (
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-gray-500">Loading…</p>
+      ) : trips?.length === 0 ? (
+        <p className="text-gray-500 text-center py-8">No trips yet.</p>
       ) : (
-        <div className="space-y-2">
-          {trips?.map((trip) => {
-            const tripAlbums = (albums ?? []).filter((a) => a.trip_id === trip.id);
-            const isExpanded = expandedTripId === trip.id;
-
-            return (
-              <div key={trip.id} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-                {/* Trip header row */}
-                <div className="px-4 py-3 flex items-center gap-4">
-                  <button
-                    onClick={() => setExpandedTripId(isExpanded ? null : trip.id)}
-                    className="text-gray-500 hover:text-white text-sm shrink-0 w-5 text-center"
-                    title={isExpanded ? "Collapse" : "Expand albums"}
-                  >
-                    {isExpanded ? "▾" : "▸"}
-                  </button>
-                  <div className="flex-1">
-                    <p className="font-medium text-white">{trip.title}</p>
-                    {trip.start_date && (
-                      <p className="text-xs text-gray-500">
-                        {format(new Date(trip.start_date), "MMM d, yyyy")}
-                        {trip.end_date &&
-                          trip.end_date !== trip.start_date &&
-                          ` — ${format(new Date(trip.end_date), "MMM d, yyyy")}`}
-                        {tripAlbums.length > 0 && (
-                          <span className="ml-2 text-gray-600">
-                            · {tripAlbums.length} album{tripAlbums.length !== 1 ? "s" : ""}
-                          </span>
-                        )}
-                      </p>
-                    )}
-                    {!trip.start_date && tripAlbums.length > 0 && (
-                      <p className="text-xs text-gray-600">
-                        {tripAlbums.length} album{tripAlbums.length !== 1 ? "s" : ""}
-                      </p>
-                    )}
-                  </div>
-                  <label className="flex items-center gap-1.5 text-sm text-gray-400 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={trip.is_published}
-                      onChange={(e) =>
-                        togglePublish.mutate({ id: trip.id, val: e.target.checked })
-                      }
-                      className="rounded"
-                    />
-                    Published
-                  </label>
-                  <button
-                    onClick={() => {
-                      if (confirm(`Delete "${trip.title}"?`)) remove.mutate(trip.id);
-                    }}
-                    className="text-red-500 hover:text-red-400 text-xs"
-                  >
-                    Delete
-                  </button>
-                </div>
-
-                {/* Albums panel */}
-                {isExpanded && (
-                  <div className="border-t border-gray-800 bg-gray-950/40">
-                    {tripAlbums.length === 0 ? (
-                      <p className="text-xs text-gray-600 px-10 py-3">No albums in this trip.</p>
-                    ) : (
-                      <ul className="divide-y divide-gray-800/60">
-                        {tripAlbums.map((album) => (
-                          <li key={album.id} className="flex items-center gap-3 px-10 py-2">
-                            <span className="flex-1 text-sm text-gray-300">{album.title}</span>
-                            <span className="text-xs text-gray-600">/{album.slug}</span>
-                            <button
-                              onClick={() =>
-                                assignAlbumTrip.mutate({ albumId: album.id, tripId: null })
-                              }
-                              disabled={assignAlbumTrip.isPending}
-                              className="text-xs text-gray-500 hover:text-red-400 disabled:opacity-50"
-                            >
-                              Remove
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-
-                    {/* Add unassigned album to this trip */}
-                    {unassignedAlbums.length > 0 && (
-                      <div className="px-10 py-2 border-t border-gray-800/60">
-                        <p className="text-[10px] text-gray-600 mb-1 uppercase tracking-wider">
-                          Add album to trip
-                        </p>
-                        <div className="flex gap-2 flex-wrap">
-                          {unassignedAlbums.map((a) => (
-                            <button
-                              key={a.id}
-                              onClick={() =>
-                                assignAlbumTrip.mutate({ albumId: a.id, tripId: trip.id })
-                              }
-                              disabled={assignAlbumTrip.isPending}
-                              className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1 rounded border border-gray-700 disabled:opacity-50"
-                            >
-                              + {a.title}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+        <div>
+          {years.map((year) => (
+            <div key={year} className="mb-10">
+              {/* Year marker */}
+              <div className="flex items-center gap-3 mb-5">
+                <div className="h-px flex-1 bg-gray-800" />
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest px-3 py-1 bg-gray-900 border border-gray-800 rounded-full">
+                  {year}
+                </span>
+                <div className="h-px flex-1 bg-gray-800" />
               </div>
-            );
-          })}
-          {trips?.length === 0 && <p className="text-gray-500 text-center py-8">No trips yet.</p>}
-        </div>
-      )}
 
-      {/* Unassigned albums section */}
-      {unassignedAlbums.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-            Albums not in a trip ({unassignedAlbums.length})
-          </h2>
-          <div className="space-y-1">
-            {unassignedAlbums.map((album) => (
-              <div
-                key={album.id}
-                className="bg-gray-900 border border-gray-800 rounded px-4 py-2 flex items-center gap-3"
-              >
-                <span className="flex-1 text-sm text-gray-300">{album.title}</span>
-                <span className="text-xs text-gray-600">/{album.slug}</span>
-                {trips && trips.length > 0 && (
-                  <select
-                    defaultValue=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        assignAlbumTrip.mutate({
-                          albumId: album.id,
-                          tripId: Number(e.target.value),
-                        });
-                        e.target.value = "";
-                      }
-                    }}
-                    className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none"
-                  >
-                    <option value="">Assign to trip…</option>
-                    {trips.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.title}
-                      </option>
-                    ))}
-                  </select>
-                )}
+              {/* Trips under this year with a vertical timeline line */}
+              <div className="relative border-l border-gray-700 ml-1.5 space-y-4">
+                {byYear.get(year)!.map((trip) => renderTrip(trip))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+
+          {undatedTrips.length > 0 && (
+            <div className="mb-10">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="h-px flex-1 bg-gray-800" />
+                <span className="text-xs font-semibold text-gray-600 uppercase tracking-widest px-3 py-1 bg-gray-900 border border-gray-800 rounded-full">
+                  No Date
+                </span>
+                <div className="h-px flex-1 bg-gray-800" />
+              </div>
+              <div className="relative border-l border-gray-700 ml-1.5 space-y-4">
+                {undatedTrips.map((trip) => renderTrip(trip))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
