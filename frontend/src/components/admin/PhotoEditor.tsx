@@ -84,16 +84,16 @@ export function PhotoEditor({ photo, onClose, onSaved, locationCoords }: Props) 
 
   const save = useMutation({
     mutationFn: async () => {
-      const updated = (await adminPhotos.update(photo.id, {
+      await adminPhotos.update(photo.id, {
         title: title || null,
         caption: caption || null,
         is_published: isPublished,
         is_featured: isFeatured,
         location_id: locationId || null,
         trip_id: tripId || null,
-      })) as Photo;
+      });
       await adminPhotos.setSpecies(photo.id, speciesIds);
-      return updated;
+      return (await adminPhotos.get(photo.id)) as Photo;
     },
     onSuccess: (updated) => onSaved(updated),
   });
