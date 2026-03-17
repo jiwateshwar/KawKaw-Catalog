@@ -15,6 +15,7 @@ class AlbumOut(BaseModel):
     sort_order: int
     is_published: bool
     created_at: datetime
+    preview_photos: list[str] = []
 
     model_config = {"from_attributes": True}
 

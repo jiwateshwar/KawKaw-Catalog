@@ -75,6 +75,7 @@ export interface Trip {
   cover_photo_id: number | null;
   is_published: boolean;
   created_at: string;
+  preview_photos: string[];
 }
 
 export interface Album {
@@ -89,6 +90,7 @@ export interface Album {
   sort_order: number;
   is_published: boolean;
   created_at: string;
+  preview_photos: string[];
 }
 
 export interface ScanJob {

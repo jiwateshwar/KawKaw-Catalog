@@ -252,7 +252,11 @@ export default function BrowsePage() {
         let tripId: number | null = null;
 
         if (albumTripId === "new" && newTripName.trim()) {
-          const trip = (await adminTrips.create({ title: newTripName.trim() })) as Trip;
+          const trip = (await adminTrips.create({
+            title: newTripName.trim(),
+            start_date: folderDate || null,
+            is_published: true,
+          })) as Trip;
           tripId = trip.id;
           qc.invalidateQueries({ queryKey: ["admin-trips"] });
         } else if (typeof albumTripId === "number") {
@@ -265,7 +269,7 @@ export default function BrowsePage() {
           trip_id: tripId,
           location_id: result.location_id ?? (folderLocation?.isNew ? null : (folderLocation?.id ?? null)),
           shoot_date: folderDate || null,
-          is_published: false,
+          is_published: true,
         })) as Album;
 
         // Store album ID — the auto-link effect will add current + future photos

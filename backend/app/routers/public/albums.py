@@ -15,8 +15,45 @@ router = APIRouter(prefix="/api/albums", tags=["public-albums"])
 
 @router.get("", response_model=list[AlbumOut])
 async def list_albums(db: AsyncSession = Depends(get_db)):
-    rows = (await db.execute(select(Album).where(Album.is_published == True).order_by(Album.sort_order))).scalars().all()  # noqa: E712
-    return rows
+    rows = (
+        await db.execute(
+            select(Album)
+            .where(Album.is_published == True)  # noqa: E712
+            .order_by(Album.sort_order, Album.id.desc())
+        )
+    ).scalars().all()
+
+    if not rows:
+        return []
+
+    # Fetch up to 5 preview photo URLs per album in a single batch query
+    album_ids = [a.id for a in rows]
+    preview_rows = (
+        await db.execute(
+            select(AlbumPhoto.album_id, Photo.thumb_sm_path)
+            .join(Photo, Photo.id == AlbumPhoto.photo_id)
+            .where(
+                AlbumPhoto.album_id.in_(album_ids),
+                Photo.is_published == True,  # noqa: E712
+                Photo.thumb_sm_path.isnot(None),
+            )
+            .order_by(AlbumPhoto.album_id, AlbumPhoto.sort_order, AlbumPhoto.photo_id)
+        )
+    ).all()
+
+    previews: dict[int, list[str]] = {}
+    for album_id, thumb_path in preview_rows:
+        if album_id not in previews:
+            previews[album_id] = []
+        if len(previews[album_id]) < 5 and thumb_path:
+            previews[album_id].append(thumb_path)
+
+    result = []
+    for a in rows:
+        data = {c.name: getattr(a, c.name) for c in Album.__table__.columns}
+        data["preview_photos"] = previews.get(a.id, [])
+        result.append(data)
+    return result
 
 
 @router.get("/{slug}", response_model=AlbumOut)

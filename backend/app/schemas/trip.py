@@ -13,6 +13,7 @@ class TripOut(BaseModel):
     cover_photo_id: int | None
     is_published: bool
     created_at: datetime
+    preview_photos: list[str] = []
 
     model_config = {"from_attributes": True}
 
@@ -23,6 +24,7 @@ class TripCreate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     location_id: int | None = None
+    is_published: bool = False
 
 
 class TripUpdate(BaseModel):

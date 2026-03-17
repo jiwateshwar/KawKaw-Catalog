@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { adminAlbums, adminLocations } from "@/lib/api";
-import type { Album, Location } from "@/types/api";
+import { adminAlbums, adminLocations, adminTrips } from "@/lib/api";
+import type { Album, Location, Trip } from "@/types/api";
 import { format, parseISO } from "date-fns";
 
 type ViewMode = "month" | "year" | "location";
@@ -16,17 +16,143 @@ type LocationDrill =
 
 type AlbumWithLoc = Album & { _loc: Location | null };
 
+const INPUT_CLS = "w-full bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500";
+
 function AlbumRow({
   album,
+  locations,
+  trips,
   onToggle,
   onDelete,
+  onSaved,
 }: {
   album: AlbumWithLoc;
+  locations: Location[];
+  trips: Trip[];
   onToggle: (args: { id: number; val: boolean }) => void;
   onDelete: (id: number) => void;
+  onSaved: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    title: album.title,
+    slug: album.slug,
+    description: album.description ?? "",
+    shoot_date: album.shoot_date ?? "",
+    location_id: album.location_id != null ? String(album.location_id) : "",
+    trip_id: album.trip_id != null ? String(album.trip_id) : "",
+  });
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      adminAlbums.update(album.id, {
+        title: form.title,
+        slug: form.slug,
+        description: form.description || null,
+        shoot_date: form.shoot_date || null,
+        location_id: form.location_id ? Number(form.location_id) : null,
+        trip_id: form.trip_id ? Number(form.trip_id) : null,
+      }),
+    onSuccess: () => {
+      setEditing(false);
+      onSaved();
+    },
+  });
+
+  if (editing) {
+    return (
+      <div className="bg-gray-900 border border-brand-600/40 rounded-lg p-4 space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Title</label>
+            <input
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className={INPUT_CLS}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Slug</label>
+            <input
+              value={form.slug}
+              onChange={(e) => setForm({ ...form, slug: e.target.value })}
+              className={INPUT_CLS}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Date</label>
+            <input
+              type="date"
+              value={form.shoot_date}
+              onChange={(e) => setForm({ ...form, shoot_date: e.target.value })}
+              className={INPUT_CLS}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Location</label>
+            <select
+              value={form.location_id}
+              onChange={(e) => setForm({ ...form, location_id: e.target.value })}
+              className={INPUT_CLS}
+            >
+              <option value="">— None —</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                  {l.country ? `, ${l.country}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Trip</label>
+            <select
+              value={form.trip_id}
+              onChange={(e) => setForm({ ...form, trip_id: e.target.value })}
+              className={INPUT_CLS}
+            >
+              <option value="">— None —</option>
+              {trips.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Description</label>
+            <input
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Optional…"
+              className={INPUT_CLS}
+            />
+          </div>
+        </div>
+        <div className="flex gap-2 items-center">
+          <button
+            onClick={() => saveMut.mutate()}
+            disabled={!form.title || saveMut.isPending}
+            className="bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded transition-colors"
+          >
+            {saveMut.isPending ? "Saving…" : "Save"}
+          </button>
+          <button
+            onClick={() => setEditing(false)}
+            className="text-gray-400 hover:text-white text-xs px-3 py-1.5"
+          >
+            Cancel
+          </button>
+          {saveMut.isError && (
+            <span className="text-xs text-red-400">Save failed.</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 flex items-center gap-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 flex items-center gap-3">
       <div className="flex-1 min-w-0">
         <p className="font-medium text-white truncate">{album.title}</p>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -44,6 +170,12 @@ function AlbumRow({
           )}
         </div>
       </div>
+      <button
+        onClick={() => setEditing(true)}
+        className="text-xs text-gray-400 hover:text-white shrink-0 transition-colors"
+      >
+        Edit
+      </button>
       <label className="flex items-center gap-1.5 text-sm text-gray-400 cursor-pointer shrink-0">
         <input
           type="checkbox"
@@ -83,6 +215,11 @@ export default function AdminAlbumsPage() {
     queryFn: () => adminLocations.list() as Promise<Location[]>,
   });
 
+  const { data: trips } = useQuery<Trip[]>({
+    queryKey: ["admin-trips"],
+    queryFn: () => adminTrips.list() as Promise<Trip[]>,
+  });
+
   const create = useMutation({
     mutationFn: () =>
       adminAlbums.create({
@@ -119,6 +256,15 @@ export default function AdminAlbumsPage() {
 
   const handleDelete = (id: number, title: string) => {
     if (confirm(`Delete "${title}"?`)) remove.mutate(id);
+  };
+
+  const handleSaved = () => qc.invalidateQueries({ queryKey: ["admin-albums"] });
+
+  const rowProps = {
+    locations: locations ?? [],
+    trips: trips ?? [],
+    onToggle: togglePublish.mutate,
+    onSaved: handleSaved,
   };
 
   // ── Month/Year view ─────────────────────────────────────────────────────────
@@ -184,7 +330,7 @@ export default function AdminAlbumsPage() {
                               <AlbumRow
                                 key={a.id}
                                 album={a}
-                                onToggle={togglePublish.mutate}
+                                {...rowProps}
                                 onDelete={(id) => handleDelete(id, a.title)}
                               />
                             ))}
@@ -207,7 +353,7 @@ export default function AdminAlbumsPage() {
                 <AlbumRow
                   key={a.id}
                   album={a}
-                  onToggle={togglePublish.mutate}
+                  {...rowProps}
                   onDelete={(id) => handleDelete(id, a.title)}
                 />
               ))}
@@ -257,7 +403,7 @@ export default function AdminAlbumsPage() {
                   <AlbumRow
                     key={a.id}
                     album={a}
-                    onToggle={togglePublish.mutate}
+                    {...rowProps}
                     onDelete={(id) => handleDelete(id, a.title)}
                   />
                 ))}
@@ -275,7 +421,7 @@ export default function AdminAlbumsPage() {
                 <AlbumRow
                   key={a.id}
                   album={a}
-                  onToggle={togglePublish.mutate}
+                  {...rowProps}
                   onDelete={(id) => handleDelete(id, a.title)}
                 />
               ))}
@@ -305,7 +451,6 @@ export default function AdminAlbumsPage() {
       </button>
     );
 
-    // Breadcrumb
     const crumbs: { label: string; onClick?: () => void }[] = [
       { label: "Countries", onClick: () => setLocationDrill({ level: "countries" }) },
     ];
@@ -363,7 +508,6 @@ export default function AdminAlbumsPage() {
         const r = a._loc?.region ?? "(No Region)";
         regions.set(r, (regions.get(r) ?? 0) + 1);
       }
-      // If all albums share the same (implicit) region, skip straight to cities
       if (regions.size === 1 && regions.has("(No Region)")) {
         const cities = new Map<string, { id: number; count: number }>();
         for (const a of countryAlbums) {
@@ -448,7 +592,7 @@ export default function AdminAlbumsPage() {
             <AlbumRow
               key={a.id}
               album={a}
-              onToggle={togglePublish.mutate}
+              {...rowProps}
               onDelete={(id) => handleDelete(id, a.title)}
             />
           ))}
@@ -461,7 +605,6 @@ export default function AdminAlbumsPage() {
 
     return (
       <div>
-        {/* Breadcrumb navigation */}
         <div className="flex items-center gap-1 mb-5 flex-wrap text-sm">
           {crumbs.map((b, i) => (
             <span key={i} className="flex items-center gap-1">
@@ -486,7 +629,6 @@ export default function AdminAlbumsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Albums</h1>
         <div className="flex items-center gap-3">
-          {/* View mode tabs */}
           <div className="flex rounded-lg overflow-hidden border border-gray-700">
             {(["month", "year", "location"] as ViewMode[]).map((m) => (
               <button
@@ -525,7 +667,7 @@ export default function AdminAlbumsPage() {
                   setNewTitle(e.target.value);
                   if (!newSlug) setNewSlug(slugify(e.target.value));
                 }}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                className={INPUT_CLS}
                 autoFocus
               />
             </div>
@@ -534,7 +676,7 @@ export default function AdminAlbumsPage() {
               <input
                 value={newSlug}
                 onChange={(e) => setNewSlug(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                className={INPUT_CLS}
               />
             </div>
           </div>
@@ -543,7 +685,7 @@ export default function AdminAlbumsPage() {
             <input
               value={newDesc}
               onChange={(e) => setNewDesc(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+              className={INPUT_CLS}
             />
           </div>
           <div className="flex gap-2">
