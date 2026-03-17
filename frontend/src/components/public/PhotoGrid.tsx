@@ -15,57 +15,73 @@ export function PhotoGrid({ photos }: Props) {
   return (
     <div
       style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-        gap: "15px",
-        alignItems: "start",
+        columns: "2 280px",
+        columnGap: "4px",
       }}
     >
       {photos.map((photo) => {
-        const hasRatio = photo.width && photo.height;
-        const aspectRatio = hasRatio
-          ? `${photo.width} / ${photo.height}`
-          : "4 / 3";
-
         const firstSpecies = photo.species[0] ?? null;
+        const isVideo = photo.file_type === "video";
+
+        const overlay = firstSpecies && (
+          <div
+            style={{ pointerEvents: "none" }}
+            className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent pt-10 pb-3 px-3"
+          >
+            <p className="text-white text-sm font-medium leading-snug truncate drop-shadow">
+              {firstSpecies.common_name}
+            </p>
+            {firstSpecies.scientific_name && (
+              <p className="text-gray-300 text-xs italic leading-snug truncate drop-shadow mt-0.5">
+                {firstSpecies.scientific_name}
+              </p>
+            )}
+          </div>
+        );
+
+        if (isVideo) {
+          return (
+            <div
+              key={photo.id}
+              className="relative overflow-hidden rounded bg-gray-800"
+              style={{ breakInside: "avoid", marginBottom: "4px" }}
+            >
+              <video
+                src={`/api/photos/${photo.id}/stream`}
+                poster={photo.thumb_md_url ?? undefined}
+                controls
+                playsInline
+                preload="none"
+                className="w-full block"
+              />
+              {overlay}
+            </div>
+          );
+        }
 
         return (
           <Link
             key={photo.id}
             href={`/photos/${photo.id}`}
-            className="group relative block overflow-hidden rounded-lg bg-gray-800"
-            style={{ aspectRatio }}
+            className="group relative block overflow-hidden rounded bg-gray-800"
+            style={{ breakInside: "avoid", marginBottom: "4px" }}
           >
             {photo.thumb_md_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={photo.thumb_md_url}
                 alt={photo.title ?? photo.filename}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                className="w-full block group-hover:scale-105 transition-transform duration-500"
                 loading="lazy"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs">
+              <div className="w-full h-48 flex items-center justify-center text-gray-600 text-xs">
                 {photo.thumb_status === "pending" || photo.thumb_status === "processing"
                   ? "Processing…"
                   : "No preview"}
               </div>
             )}
-
-            {firstSpecies && (
-              <div
-                style={{ pointerEvents: "none" }}
-                className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent pt-10 pb-3 px-3"
-              >
-                <p className="text-white text-sm font-medium leading-snug truncate drop-shadow">
-                  {firstSpecies.common_name}
-                </p>
-                {firstSpecies.scientific_name && (
-                  <p className="text-gray-300 text-xs italic leading-snug truncate drop-shadow mt-0.5">
-                    {firstSpecies.scientific_name}
-                  </p>
-                )}
-              </div>
-            )}
+            {overlay}
           </Link>
         );
       })}

@@ -80,6 +80,10 @@ export default function BrowsePage() {
   const [pendingAlbumId, setPendingAlbumId] = useState<number | null>(null);
   const albumLinkedRef = useRef<Set<number>>(new Set());
 
+  // Duplicate-name warnings (shown before creating)
+  const [duplicateAlbum, setDuplicateAlbum] = useState<Album | null>(null);
+  const [duplicateTrip, setDuplicateTrip] = useState<Trip | null>(null);
+
   // Active scan job
   const [pendingJobId, setPendingJobId] = useState<number | null>(null);
 
@@ -107,6 +111,11 @@ export default function BrowsePage() {
   const { data: trips } = useQuery<Trip[]>({
     queryKey: ["admin-trips"],
     queryFn: () => adminTrips.list() as Promise<Trip[]>,
+  });
+
+  const { data: albums } = useQuery<Album[]>({
+    queryKey: ["admin-albums"],
+    queryFn: () => adminAlbums.list() as Promise<Album[]>,
   });
 
   const { data: photosPage, isLoading: photosLoading } = useQuery<PhotoPage>({
@@ -148,7 +157,16 @@ export default function BrowsePage() {
     if (!photosPage) return;
     if (folderLoadedRef.current !== selectedFolderPath) {
       folderLoadedRef.current = selectedFolderPath;
-      setLocalPhotos([...photosPage.items].sort((a, b) => a.filename.localeCompare(b.filename)));
+      const sorted = [...photosPage.items].sort((a, b) => a.filename.localeCompare(b.filename));
+      setLocalPhotos(sorted);
+      // Detect if this folder already has an album and pre-wire the link
+      const existingAlbumId = sorted.find((p) => p.album_id != null)?.album_id ?? null;
+      if (existingAlbumId !== null) {
+        setPendingAlbumId(existingAlbumId);
+        albumLinkedRef.current = new Set(
+          sorted.filter((p) => p.album_id === existingAlbumId).map((p) => p.id)
+        );
+      }
     } else {
       // Thumb polling refetch — only update thumbnail fields to preserve in-progress edits
       setLocalPhotos((prev) =>
@@ -229,7 +247,7 @@ export default function BrowsePage() {
   });
 
   const applyToFolder = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts: { useExistingAlbumId?: number; useExistingTripId?: number } = {}) => {
       // 1. Bulk-update location + date on all photos in folder
       const result = (await adminPhotos.bulkFolderUpdate({
         folder_path: selectedFolderPath!,
@@ -247,11 +265,20 @@ export default function BrowsePage() {
         );
       }
 
-      // 2. Create album (if name provided); photos are linked via the pendingAlbumId effect
-      if (albumName.trim()) {
+      // 2. If "use existing album" was chosen, wire it up and skip creation
+      if (opts.useExistingAlbumId != null) {
+        setPendingAlbumId(opts.useExistingAlbumId);
+        albumLinkedRef.current = new Set();
+        return result;
+      }
+
+      // 3. Create album only if name is provided AND no album already linked for this folder
+      if (albumName.trim() && pendingAlbumId === null) {
         let tripId: number | null = null;
 
-        if (albumTripId === "new" && newTripName.trim()) {
+        if (opts.useExistingTripId != null) {
+          tripId = opts.useExistingTripId;
+        } else if (albumTripId === "new" && newTripName.trim()) {
           const trip = (await adminTrips.create({
             title: newTripName.trim(),
             start_date: folderDate || null,
@@ -291,6 +318,33 @@ export default function BrowsePage() {
   });
 
   // ── Derived data ─────────────────────────────────────────────────────────────
+
+  // Album/trip associated with this folder (detected from photos or created this session)
+  const existingAlbum = pendingAlbumId != null ? (albums?.find((a) => a.id === pendingAlbumId) ?? null) : null;
+
+  const handleSaveClick = () => {
+    // Check for duplicate album name before creating (skip if pendingAlbumId is already set)
+    if (albumName.trim() && pendingAlbumId === null) {
+      const dup = albums?.find(
+        (a) => a.title.toLowerCase() === albumName.trim().toLowerCase()
+      );
+      if (dup) {
+        setDuplicateAlbum(dup);
+        return;
+      }
+    }
+    // Check for duplicate trip name before creating
+    if (albumTripId === "new" && newTripName.trim()) {
+      const dup = trips?.find(
+        (t) => t.title.toLowerCase() === newTripName.trim().toLowerCase()
+      );
+      if (dup) {
+        setDuplicateTrip(dup);
+        return;
+      }
+    }
+    applyToFolder.mutate({});
+  };
 
   const isImporting = importMutation.isPending || !!pendingJobId;
   const fileCount = selectedFolderEntry?.file_count ?? 0;
@@ -494,13 +548,64 @@ export default function BrowsePage() {
                     />
                   )}
                   <button
-                    onClick={() => applyToFolder.mutate()}
+                    onClick={handleSaveClick}
                     disabled={applyToFolder.isPending}
                     className="shrink-0 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white text-xs px-3 py-1.5 rounded transition-colors whitespace-nowrap"
                   >
                     {applyToFolder.isPending ? "Saving…" : "Save Folder Settings"}
                   </button>
                 </div>
+
+                {/* Existing album indicator */}
+                {existingAlbum && (
+                  <p className="text-xs text-green-500">
+                    ✓ Album: <span className="font-medium">{existingAlbum.title}</span> — new photos will be added automatically.
+                  </p>
+                )}
+
+                {/* Duplicate album warning */}
+                {duplicateAlbum && (
+                  <div className="bg-yellow-950/50 border border-yellow-700/50 rounded p-2.5 text-xs flex items-center gap-2 flex-wrap">
+                    <span className="text-yellow-300">Album &ldquo;{duplicateAlbum.title}&rdquo; already exists.</span>
+                    <button
+                      onClick={() => { setDuplicateAlbum(null); applyToFolder.mutate({ useExistingAlbumId: duplicateAlbum.id }); }}
+                      className="bg-brand-600 hover:bg-brand-700 text-white px-2 py-1 rounded"
+                    >
+                      Use existing
+                    </button>
+                    <button
+                      onClick={() => { setDuplicateAlbum(null); applyToFolder.mutate({}); }}
+                      className="bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded"
+                    >
+                      Create new
+                    </button>
+                    <button onClick={() => setDuplicateAlbum(null)} className="text-gray-500 hover:text-gray-300 px-1">
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                {/* Duplicate trip warning */}
+                {duplicateTrip && (
+                  <div className="bg-yellow-950/50 border border-yellow-700/50 rounded p-2.5 text-xs flex items-center gap-2 flex-wrap">
+                    <span className="text-yellow-300">Trip &ldquo;{duplicateTrip.title}&rdquo; already exists.</span>
+                    <button
+                      onClick={() => { setDuplicateTrip(null); applyToFolder.mutate({ useExistingTripId: duplicateTrip.id }); }}
+                      className="bg-brand-600 hover:bg-brand-700 text-white px-2 py-1 rounded"
+                    >
+                      Use existing
+                    </button>
+                    <button
+                      onClick={() => { setDuplicateTrip(null); applyToFolder.mutate({}); }}
+                      className="bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded"
+                    >
+                      Create new
+                    </button>
+                    <button onClick={() => setDuplicateTrip(null)} className="text-gray-500 hover:text-gray-300 px-1">
+                      Cancel
+                    </button>
+                  </div>
+                )}
 
                 {applyToFolder.isSuccess && (
                   <p className="text-xs text-green-400">Folder settings saved — photos updated.</p>

@@ -80,12 +80,17 @@ async def trip_photos(
     limit: int = Query(24, le=100),
     db: AsyncSession = Depends(get_db),
 ):
+    # Join via albums → album_photos → photos so this works even when
+    # Photo.trip_id is not set (the scan flow sets Album.trip_id, not Photo.trip_id)
     q = (
         select(Photo)
-        .where(Photo.trip_id == trip_id, Photo.is_published == True)  # noqa: E712
+        .join(AlbumPhoto, AlbumPhoto.photo_id == Photo.id)
+        .join(Album, Album.id == AlbumPhoto.album_id)
+        .where(Album.trip_id == trip_id, Photo.is_published == True)  # noqa: E712
         .options(selectinload(Photo.species_links).selectinload(PhotoSpecies.species))
         .order_by(Photo.captured_at.asc(), Photo.id.asc())
         .limit(limit + 1)
+        .distinct()
     )
     if cursor:
         q = q.where(Photo.id > cursor)

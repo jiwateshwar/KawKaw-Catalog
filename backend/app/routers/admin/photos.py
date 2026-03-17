@@ -53,7 +53,7 @@ async def list_photos_admin(
 
     rows = (await db.execute(q)).scalars().all()
     has_more = len(rows) > limit
-    items = [_photo_to_out(p, has_album=bool(p.album_links)) for p in rows[:limit]]
+    items = [_photo_to_out(p, has_album=bool(p.album_links), album_id=p.album_links[0].album_id if p.album_links else None) for p in rows[:limit]]
     return PhotoPage(items=items, next_cursor=items[-1].id if has_more else None)
 
 
@@ -74,7 +74,7 @@ async def get_photo_admin(
     photo = await db.scalar(q)
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
-    return _photo_to_out(photo, has_album=bool(photo.album_links))
+    return _photo_to_out(photo, has_album=bool(photo.album_links), album_id=photo.album_links[0].album_id if photo.album_links else None)
 
 
 @router.patch("/{photo_id}", response_model=PhotoOut)
@@ -111,7 +111,7 @@ async def update_photo(
         )
     )
     photo = await db.scalar(q)
-    return _photo_to_out(photo, has_album=bool(photo.album_links))
+    return _photo_to_out(photo, has_album=bool(photo.album_links), album_id=photo.album_links[0].album_id if photo.album_links else None)
 
 
 @router.post("/{photo_id}/species", response_model=PhotoOut)
@@ -154,7 +154,7 @@ async def set_photo_species(
         )
     )
     photo = await db.scalar(q)
-    return _photo_to_out(photo, has_album=bool(photo.album_links))
+    return _photo_to_out(photo, has_album=bool(photo.album_links), album_id=photo.album_links[0].album_id if photo.album_links else None)
 
 
 @router.post("/{photo_id}/crop", response_model=PhotoOut)
@@ -189,7 +189,7 @@ async def set_crop(
         )
     )
     photo = await db.scalar(q)
-    return _photo_to_out(photo, has_album=bool(photo.album_links))
+    return _photo_to_out(photo, has_album=bool(photo.album_links), album_id=photo.album_links[0].album_id if photo.album_links else None)
 
 
 @router.post("/bulk-publish")

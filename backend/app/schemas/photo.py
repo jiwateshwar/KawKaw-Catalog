@@ -43,6 +43,7 @@ class PhotoOut(BaseModel):
     imported_at: datetime
     species: list[SpeciesTag] = []
     has_album: bool = False
+    album_id: int | None = None
 
     model_config = {"from_attributes": True}
 

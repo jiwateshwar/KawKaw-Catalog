@@ -36,6 +36,7 @@ export interface Photo {
   imported_at: string;
   species: SpeciesTag[];
   has_album: boolean;
+  album_id: number | null;
 }
 
 export interface PhotoPage {

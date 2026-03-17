@@ -3,7 +3,7 @@ import os
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -17,7 +17,7 @@ from app.schemas.photo import PhotoOut, PhotoPage
 router = APIRouter(prefix="/api/photos", tags=["public-photos"])
 
 
-def _photo_to_out(photo: Photo, *, has_album: bool = False) -> PhotoOut:
+def _photo_to_out(photo: Photo, *, has_album: bool = False, album_id: int | None = None) -> PhotoOut:
     species = [
         {"id": ps.species.id, "common_name": ps.species.common_name, "scientific_name": ps.species.scientific_name}
         for ps in photo.species_links
@@ -31,6 +31,7 @@ def _photo_to_out(photo: Photo, *, has_album: bool = False) -> PhotoOut:
         thumb_lg_url=photo.thumb_lg_path,
         species=species,
         has_album=has_album,
+        album_id=album_id,
     )
 
 
@@ -135,3 +136,23 @@ async def get_photo(photo_id: int, db: AsyncSession = Depends(get_db)):
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
     return _photo_to_out(photo)
+
+
+@router.get("/{photo_id}/stream")
+async def stream_photo(photo_id: int, db: AsyncSession = Depends(get_db)):
+    """Stream a video file for playback in the browser."""
+    import mimetypes
+    photo = await db.scalar(
+        select(Photo).where(Photo.id == photo_id, Photo.is_published == True)  # noqa: E712
+    )
+    if not photo or photo.file_type != "video":
+        raise HTTPException(status_code=404, detail="Not found")
+    abs_path = os.path.join(settings.MEDIA_ROOT, photo.relative_path)
+    if not os.path.exists(abs_path):
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    media_type = mimetypes.guess_type(abs_path)[0] or "video/mp4"
+    return FileResponse(
+        abs_path,
+        media_type=media_type,
+        headers={"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=3600"},
+    )
