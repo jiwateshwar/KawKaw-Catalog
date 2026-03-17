@@ -200,13 +200,21 @@ export default function BrowsePage() {
     }
   }, [scanJob?.status, scanJob, selectedFolderPath, browsePath, qc]);
 
-  // Auto-link photos to pending album whenever localPhotos changes
+  // Auto-link photos to pending album whenever localPhotos changes.
+  // Videos are also auto-published here since they have no crop/species/title triggers.
   useEffect(() => {
     if (!pendingAlbumId || localPhotos.length === 0) return;
     const unlinked = localPhotos.map((p) => p.id).filter((id) => !albumLinkedRef.current.has(id));
     if (unlinked.length === 0) return;
     unlinked.forEach((id) => albumLinkedRef.current.add(id));
     adminAlbums.addPhotos(pendingAlbumId, unlinked).then(() => {
+      // Auto-publish videos — they have no crop/species trigger to drive publishing
+      const videoIds = localPhotos
+        .filter((p) => unlinked.includes(p.id) && p.file_type === "video")
+        .map((p) => p.id);
+      if (videoIds.length > 0) {
+        adminPhotos.bulkPublish(videoIds, true);
+      }
       folderLoadedRef.current = null;
       qc.invalidateQueries({ queryKey: ["folder-photos", selectedFolderPath] });
     });
