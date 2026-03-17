@@ -16,7 +16,7 @@ export function PhotoGrid({ photos }: Props) {
     <div
       style={{
         columns: "2 280px",
-        columnGap: "4px",
+        columnGap: "15px",
       }}
     >
       {photos.map((photo) => {
@@ -44,7 +44,7 @@ export function PhotoGrid({ photos }: Props) {
             <div
               key={photo.id}
               className="relative overflow-hidden rounded bg-gray-800"
-              style={{ breakInside: "avoid", marginBottom: "4px" }}
+              style={{ breakInside: "avoid", marginBottom: "15px" }}
             >
               <video
                 src={`/api/photos/${photo.id}/stream`}
@@ -64,7 +64,7 @@ export function PhotoGrid({ photos }: Props) {
             key={photo.id}
             href={`/photos/${photo.id}`}
             className="group relative block overflow-hidden rounded bg-gray-800"
-            style={{ breakInside: "avoid", marginBottom: "4px" }}
+            style={{ breakInside: "avoid", marginBottom: "15px" }}
           >
             {photo.thumb_md_url ? (
               // eslint-disable-next-line @next/next/no-img-element

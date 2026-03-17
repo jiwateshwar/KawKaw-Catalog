@@ -1,11 +1,25 @@
 import Link from "next/link";
 
-export function PublicNav() {
+async function getSiteTitle(): Promise<string> {
+  try {
+    const base = process.env.INTERNAL_API_URL ?? "http://api:8000";
+    const res = await fetch(`${base}/api/settings`, { next: { revalidate: 300 } });
+    if (res.ok) {
+      const data = await res.json();
+      return data.app_title ?? "KawKaw";
+    }
+  } catch { /* fall through */ }
+  return "KawKaw";
+}
+
+export async function PublicNav() {
+  const title = await getSiteTitle();
+
   return (
     <nav className="bg-gray-900 border-b border-gray-800 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-6 h-14">
         <Link href="/" className="font-bold text-brand-500 text-lg tracking-tight">
-          KawKaw
+          {title}
         </Link>
         <Link href="/species" className="text-sm text-gray-400 hover:text-white transition-colors">
           Species

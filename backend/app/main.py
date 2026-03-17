@@ -50,11 +50,13 @@ from app.routers.public.species import router as pub_species
 from app.routers.public.albums import router as pub_albums
 from app.routers.public.trips import router as pub_trips
 from app.routers.public.locations import router as pub_locations
+from app.routers.public.settings import router as pub_settings
 app.include_router(pub_photos)
 app.include_router(pub_species)
 app.include_router(pub_albums)
 app.include_router(pub_trips)
 app.include_router(pub_locations)
+app.include_router(pub_settings)
 
 # Admin
 from app.routers.admin.photos import router as adm_photos
