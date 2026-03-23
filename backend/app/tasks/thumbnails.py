@@ -117,4 +117,3 @@ def generate_thumbnails(self, photo_id: int) -> None:
             await db.commit()
 
     asyncio.run(_run())
-    asyncio.get_event_loop().close() if asyncio.get_event_loop().is_closed() else None

@@ -783,16 +783,12 @@ function PhotoRow({
         !speciesIds.includes(s.id) &&
         q.length >= 1 &&
         (s.common_name.toLowerCase().includes(q) ||
-          (s.scientific_name ?? "").toLowerCase().includes(q))
+          (s.scientific_name ?? "").toLowerCase().includes(q)) &&
+        // When a location is set and eBird data is loaded, only show species
+        // known to occur near that location — not species from other locations.
+        (!locationCoords || ebirdSciNames.size === 0 ||
+          ebirdSciNames.has((s.scientific_name ?? "").toLowerCase()))
     )
-    .sort((a, b) => {
-      if (!locationCoords) return 0;
-      const aE = ebirdSciNames.has((a.scientific_name ?? "").toLowerCase());
-      const bE = ebirdSciNames.has((b.scientific_name ?? "").toLowerCase());
-      if (aE && !bE) return -1;
-      if (!aE && bE) return 1;
-      return 0;
-    })
     .slice(0, 6);
 
   const dbSciNames = new Set(
