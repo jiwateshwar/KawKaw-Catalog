@@ -92,7 +92,7 @@ def parse_exif(raw_exif: dict[str, Any]) -> dict[str, Any]:
 def _str(val: Any) -> str | None:
     if val is None:
         return None
-    s = str(val).strip()
+    s = str(val).replace("\x00", "").strip()
     return s if s else None
 
 
@@ -110,13 +110,16 @@ def extract_from_file(path: str) -> tuple[dict[str, Any], dict[str, Any]]:
         raw = extract_raw_exif(path)
 
     # Make raw JSON-serialisable (Pillow returns IFDRational objects etc.)
+    # Also strip null bytes — Nikon and some other cameras pad strings with \x00
     safe_raw = {}
     for k, v in raw.items():
+        if isinstance(v, str):
+            v = v.replace("\x00", "")
         try:
             import json
             json.dumps({str(k): v})
             safe_raw[str(k)] = v
         except (TypeError, ValueError):
-            safe_raw[str(k)] = str(v)
+            safe_raw[str(k)] = str(v).replace("\x00", "")
 
     return parse_exif(raw), safe_raw
